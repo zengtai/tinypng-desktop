@@ -4,21 +4,16 @@
   "description": "Default capability for tinypng-desktop",
   "windows": ["main"],
   "permissions": [
-    "core:path:default",
-    "core:event:default",
-    "core:window:default",
-    "core:app:default",
-    "core:resources:default",
-    "core:menu:default",
-    "core:tray:default",
+    "core:default",
     "fs:default",
     "fs:allow-read-text-file",
     "fs:allow-write-file",
-    "fs:allow-create-dir",
+    "fs:allow-mkdir",
     "fs:allow-read-dir",
     "fs:allow-stat",
     "dialog:default",
     "dialog:allow-open",
-    "shell:default"
+    "shell:default",
+    "shell:allow-open"
   ]
 }
