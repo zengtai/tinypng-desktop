@@ -3,7 +3,10 @@ name: Build TinyPNG Desktop
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-windows:
@@ -15,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install Rust
@@ -31,16 +34,72 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Create icons
+        shell: powershell
+        run: |
+          $iconDir = "src-tauri\icons"
+          New-Item -ItemType Directory -Force -Path $iconDir
+          Add-Type -AssemblyName System.Drawing
+
+          function New-PngFile($path, $size) {
+            $bmp = New-Object System.Drawing.Bitmap($size, $size)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::FromArgb(255, 255, 107, 53))
+            $g.Dispose()
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $bmp.Dispose()
+          }
+
+          New-PngFile "$iconDir\32x32.png" 32
+          New-PngFile "$iconDir\128x128.png" 128
+          New-PngFile "$iconDir\128x128@2x.png" 256
+
+          $sizes = @(16, 32, 48, 256)
+          $pngDataList = @()
+          foreach ($sz in $sizes) {
+            $bmp = New-Object System.Drawing.Bitmap($sz, $sz)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::FromArgb(255, 255, 107, 53))
+            $g.Dispose()
+            $ms = New-Object System.IO.MemoryStream
+            $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+            $pngDataList += , $ms.ToArray()
+            $bmp.Dispose()
+          }
+
+          $out = New-Object System.IO.MemoryStream
+          $w = New-Object System.IO.BinaryWriter($out)
+          $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$sizes.Count)
+          $offset = [uint32](6 + 16 * $sizes.Count)
+          for ($i = 0; $i -lt $sizes.Count; $i++) {
+            $sz = if ($sizes[$i] -eq 256) { 0 } else { $sizes[$i] }
+            $w.Write([byte]$sz); $w.Write([byte]$sz)
+            $w.Write([byte]0); $w.Write([byte]0)
+            $w.Write([uint16]1); $w.Write([uint16]32)
+            $w.Write([uint32]$pngDataList[$i].Length)
+            $w.Write($offset)
+            $offset += [uint32]$pngDataList[$i].Length
+          }
+          foreach ($data in $pngDataList) { $w.Write($data) }
+          [System.IO.File]::WriteAllBytes("$iconDir\icon.ico", $out.ToArray())
+          Copy-Item "$iconDir\icon.ico" "$iconDir\icon.icns"
+          Write-Host "All icons created."
+
+      - name: Build frontend
+        run: npm run build
+
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        run: npm run tauri build -- --verbose
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUST_BACKTRACE: full
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          tagName: v__VERSION__
-          releaseName: TinyPNG Desktop v__VERSION__
-          releaseBody: |
-            ## 下载
-            - **Windows 安装包**：下载 `TinyPNG-Desktop_x.x.x_x64-setup.exe`
-            - **免安装版**：下载 `TinyPNG-Desktop_x.x.x_x64.msi`
-          releaseDraft: false
-          prerelease: false
+          name: windows-installer
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: warn
