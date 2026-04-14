@@ -403,6 +403,15 @@ mod commands {
     }
 
     #[tauri::command]
+    pub fn get_config_path() -> Result<String, String> {
+        let exe = std::env::current_exe()
+            .map_err(|e| e.to_string())?;
+        let dir = exe.parent()
+            .ok_or_else(|| "Cannot get exe directory".to_string())?;
+        Ok(dir.join("settings.json").to_string_lossy().to_string())
+    }
+
+    #[tauri::command]
     pub async fn open_folder(path: String) -> Result<(), String> {
         #[cfg(target_os = "macos")]
         std::process::Command::new("open")
@@ -440,6 +449,7 @@ pub fn run() {
             commands::save_settings,
             commands::compress_images,
             commands::open_folder,
+            commands::get_config_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

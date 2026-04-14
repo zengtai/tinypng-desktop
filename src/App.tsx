@@ -17,7 +17,16 @@ export default function App() {
   } = useAppStore();
 
   useEffect(() => {
-    tauriApi.getSettings().then(setSettings).catch(console.error);
+    // Load from Rust state first, then merge persisted settings from disk
+    tauriApi.getSettings().then(async (rustSettings) => {
+      const { loadPersistedSettings } = await import('./utils/tauri');
+      const persisted = await loadPersistedSettings();
+      const merged = { ...rustSettings, ...persisted };
+      setSettings(merged);
+      if (Object.keys(persisted).length > 0) {
+        tauriApi.saveSettings(merged).catch(console.error);
+      }
+    }).catch(console.error);
   }, []);
 
   // Listen for compression results from Rust backend

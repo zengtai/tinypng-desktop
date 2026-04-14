@@ -1,28 +1,63 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
-import { tauriApi, pickDirectory } from '../utils/tauri';
+import { tauriApi, pickDirectory, persistSettings, loadPersistedSettings, clearPersistedSettings } from '../utils/tauri';
 import { AppSettings } from '../types';
 
 export default function SettingsPanel() {
   const { settings, setSettings } = useAppStore();
   const [local, setLocal] = useState<AppSettings>(settings);
   const [saved, setSaved] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => setLocal(settings), [settings]);
+  // Load persisted settings on first mount
+  useEffect(() => {
+    if (loaded) return;
+    loadPersistedSettings().then(persisted => {
+      if (Object.keys(persisted).length > 0) {
+        const merged = { ...settings, ...persisted };
+        setLocal(merged);
+        setSettings(merged);
+        // Sync to Rust backend too
+        tauriApi.saveSettings(merged).catch(console.error);
+      }
+      setLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => { setLocal(settings); }, [settings]);
 
   const set = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) =>
     setLocal(s => ({ ...s, [key]: value }));
 
   const handleSave = async () => {
     await tauriApi.saveSettings(local);
+    await persistSettings(local);   // ← write to disk
     setSettings(local);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const defaultSettings: AppSettings = {
+    output_dir: null,
+    output_suffix: '_tiny',
+    overwrite_original: false,
+    fmt_folder: false,
+    max_concurrent: 3,
+    retry_count: 2,
+  };
+
   const handlePickDir = async () => {
     const dir = await pickDirectory();
     if (dir) set('output_dir', dir);
+  };
+
+  const handleReset = async () => {
+    setLocal(defaultSettings);
+    await tauriApi.saveSettings(defaultSettings);
+    await clearPersistedSettings();
+    setSettings(defaultSettings);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
   return (
@@ -83,18 +118,20 @@ export default function SettingsPanel() {
         </div>
         <div className="s-row">
           <span className="s-label">失败重试</span>
-          <select className="s-select" value={local.retry_count} onChange={e => set('retry_count', Number(e.target.value))}>
+          <select className="s-select" value={local.retry_count}
+            onChange={e => set('retry_count', Number(e.target.value))}>
             {[0,1,2,3].map(n => <option key={n} value={n}>{n} 次</option>)}
           </select>
         </div>
         <div className="info-box">
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/><path d="M8 7v4M8 5.2v.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          TinyPNG 每次限制 20 张。本工具自动分批，支持任意数量图片。每张图上传一次，多种格式串行处理，避免触发限速。
+          TinyPNG 每次限制 20 张。本工具自动分批，支持任意数量图片。
         </div>
       </section>
 
       <div className="s-footer">
         <button className="btn btn-primary" onClick={handleSave}>保存设置</button>
+        <button className="btn btn-ghost" onClick={handleReset}>恢复默认</button>
         {saved && <span className="save-ok">✓ 已保存</span>}
       </div>
     </div>

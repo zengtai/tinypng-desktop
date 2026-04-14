@@ -10,6 +10,40 @@ export const tauriApi = {
   openFolder: (path: string) => invoke<void>('open_folder', { path }),
 };
 
+// Persistent settings — saved alongside the executable (portable-friendly)
+// Path resolved by Rust command: get_config_path -> <exe_dir>/settings.json
+
+export async function loadPersistedSettings(): Promise<Partial<AppSettings>> {
+  try {
+    const path = await invoke<string>('get_config_path');
+    const { readTextFile } = await import('@tauri-apps/plugin-fs');
+    const text = await readTextFile(path);
+    return JSON.parse(text) as Partial<AppSettings>;
+  } catch {
+    return {};
+  }
+}
+
+export async function persistSettings(settings: AppSettings): Promise<void> {
+  try {
+    const path = await invoke<string>('get_config_path');
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+    await writeTextFile(path, JSON.stringify(settings, null, 2));
+  } catch (e) {
+    console.error('Failed to persist settings:', e);
+  }
+}
+
+export async function clearPersistedSettings(): Promise<void> {
+  try {
+    const path = await invoke<string>('get_config_path');
+    const { remove } = await import('@tauri-apps/plugin-fs');
+    await remove(path);
+  } catch {
+    // File may not exist, ignore
+  }
+}
+
 export const pickDirectory = async (): Promise<string | null> => {
   const result = await open({ directory: true, multiple: false });
   return result as string | null;
