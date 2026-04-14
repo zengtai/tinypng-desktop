@@ -2,7 +2,7 @@ name: Build TinyPNG Desktop
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
   workflow_dispatch:
 
 env:
@@ -39,10 +39,9 @@ jobs:
         run: npm run build
 
       - name: Build Tauri app
-        run: npm run tauri build -- --verbose
+        run: npm run tauri build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUST_BACKTRACE: full
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
