@@ -85,8 +85,9 @@ html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-
 .card-rm:hover{color:var(--red)}
 .card-rm:disabled{opacity:.3;cursor:not-allowed}
 
-.card-body{padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.card-fmts{display:flex;gap:5px;flex-wrap:wrap}
+.card-body{padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+.card-fmts{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.card-tiles{display:flex;gap:8px;flex-wrap:wrap}
 .card-fchip{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;cursor:pointer;border:1.5px solid var(--border2);background:transparent;color:var(--text2);transition:all .12s;font-family:'DM Mono',monospace;user-select:none}
 .card-fchip:hover{border-color:var(--accent);color:var(--accent)}
 .card-fchip.on{background:rgba(255,107,43,.15);border-color:var(--accent);color:var(--accent)}

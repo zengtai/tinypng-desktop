@@ -20,6 +20,7 @@ export default function App() {
     tauriApi.getSettings().then(setSettings).catch(console.error);
   }, []);
 
+  // Listen for compression results from Rust backend
   useEffect(() => {
     const unsub1 = listenFmtResults((payload) => {
       updateFmtResult(payload.task_id, payload.result.fmt, payload.result);
@@ -29,6 +30,19 @@ export default function App() {
       unsub1.then(fn => fn());
       unsub2.then(fn => fn());
     };
+  }, []);
+
+  // Listen for OS-level file drag-drop via Tauri's native API
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('tauri://drag-drop', (event: any) => {
+        const paths: string[] = event.payload?.paths ?? [];
+        const images = paths.filter(p => /\.(png|jpe?g|webp|avif)$/i.test(p));
+        if (images.length > 0) handleDropFiles(images);
+      }).then(fn => { unlisten = fn; });
+    });
+    return () => { if (unlisten) unlisten(); };
   }, []);
 
   const handleDropFiles = useCallback(async (paths: string[]) => {

@@ -2,7 +2,7 @@ name: Build TinyPNG Desktop
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
   workflow_dispatch:
 
 env:
@@ -54,10 +54,30 @@ jobs:
             Write-Host "bundle dir not found"
           }
 
-      - name: Upload installer
+      - name: Package portable zip
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem -Recurse "src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
+          if ($exe) {
+            Write-Host "Found installer: $($exe.FullName)"
+            # Run installer silently to extract files
+            $installDir = "portable-extract"
+            Start-Process $exe.FullName -ArgumentList "/S /D=$((Resolve-Path .).Path)\$installDir" -Wait
+            if (Test-Path $installDir) {
+              Compress-Archive -Path "$installDir\*" -DestinationPath "TinyPNG-Desktop-portable.zip"
+              Write-Host "Portable zip created"
+            } else {
+              Write-Host "Extraction failed, uploading installer instead"
+              Copy-Item $exe.FullName "TinyPNG-Desktop-setup.exe"
+            }
+          }
+
+      - name: Upload portable
         uses: actions/upload-artifact@v4.6.2
         if: always()
         with:
-          name: windows-installer
-          path: src-tauri/target/release/bundle/**/*.exe
+          name: windows-portable
+          path: |
+            TinyPNG-Desktop-portable.zip
+            TinyPNG-Desktop-setup.exe
           if-no-files-found: warn

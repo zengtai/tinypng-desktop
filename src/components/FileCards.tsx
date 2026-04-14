@@ -92,7 +92,7 @@ function FileCard({ f }: { f: FileItem }) {
             </span>
           ))}
         </div>
-        {fmts.map(fmt => <FmtTile key={fmt} f={f} fmt={fmt} />)}
+        <div className="card-tiles">{fmts.map(fmt => <FmtTile key={fmt} f={f} fmt={fmt} />)}</div>
       </div>
     </div>
   );
