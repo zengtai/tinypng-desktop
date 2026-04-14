@@ -63,6 +63,7 @@ struct StoreResponse {
 #[derive(Debug, Deserialize)]
 struct ProcessResponse {
     url: String,
+    #[allow(dead_code)]
     size: u64,
     #[serde(rename = "type")]
     mime_type: String,
@@ -133,10 +134,6 @@ fn mime_to_ext(mime: &str) -> &'static str {
         _ => "png",
     }
 }
-
-// ── B: Generic retry helper ────────────────────────────────────────────────
-// Runs `op` up to `retry_count + 1` times, sleeping between attempts.
-// Returns Ok on first success, or the last error if all attempts fail.
 
 async fn with_retry<T, F, Fut>(retry_count: u32, op: F) -> Result<T, String>
 where
@@ -236,27 +233,18 @@ fn make_result(fmt: &str, status: &str, err: Option<String>) -> FmtResult {
     }
 }
 
-// ── A: PathBuf-based output path builder ──────────────────────────────────
-
 fn build_output_path(task: &CompressTask, ext: &str, fmt: &str) -> PathBuf {
     let input = Path::new(&task.file_path);
     let stem = input.file_stem().unwrap_or_default().to_string_lossy();
-
     let filename = if task.overwrite {
         format!("{stem}.{ext}")
     } else {
         format!("{stem}{}.{ext}", task.suffix)
     };
-
-    // Base dir: explicit output_dir, or same as input file
     let base_dir: PathBuf = task.output_dir
         .as_deref()
         .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            input.parent().unwrap_or(Path::new(".")).to_path_buf()
-        });
-
-    // Optionally add per-format subfolder
+        .unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")).to_path_buf());
     if task.fmt_folder {
         base_dir.join(fmt).join(filename)
     } else {
@@ -287,12 +275,10 @@ async fn compress_task(
         .first_or_octet_stream()
         .to_string();
 
-    // Mark all uploading
     for fmt in &task.formats {
         emit_fmt(&app, &task.id, &make_result(fmt, "uploading", None));
     }
 
-    // Step 1: store once (with retry)
     let store = match with_retry(retry_count, || {
         let client = client.clone();
         let bytes = image_bytes.clone();
@@ -308,15 +294,12 @@ async fn compress_task(
         }
     };
 
-    // Step 2: process + download each format serially
     for (i, fmt) in task.formats.iter().enumerate() {
         if i > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         }
-
         emit_fmt(&app, &task.id, &make_result(fmt, "processing", None));
 
-        // Process (with retry)
         let proc = match with_retry(retry_count, || {
             let client = client.clone();
             let key = store.key.clone();
@@ -326,48 +309,33 @@ async fn compress_task(
             async move { process_image(&client, &key, &ct, size, &fmt).await }
         }).await {
             Ok(p) => p,
-            Err(e) => {
-                emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e)));
-                continue;
-            }
+            Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
         };
 
-        // Download
         let bytes = match download_image(&client, &proc.url).await {
             Ok(b) => b,
-            Err(e) => {
-                emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e)));
-                continue;
-            }
+            Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
         };
 
-        // Build output path using PathBuf (A)
         let ext = mime_to_ext(&proc.mime_type);
         let out_path = build_output_path(&task, ext, fmt);
 
-        // Ensure parent directory exists
         if let Some(parent) = out_path.parent() {
             if let Err(e) = tokio::fs::create_dir_all(parent).await {
-                emit_fmt(&app, &task.id, &make_result(
-                    fmt, "error", Some(format!("创建目录失败: {e}"))
-                ));
+                emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(format!("创建目录失败: {e}"))));
                 continue;
             }
         }
 
         if let Err(e) = tokio::fs::write(&out_path, &bytes).await {
-            emit_fmt(&app, &task.id, &make_result(
-                fmt, "error", Some(format!("保存文件失败: {e}"))
-            ));
+            emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(format!("保存文件失败: {e}"))));
             continue;
         }
 
         let compressed_size = bytes.len() as u64;
         let saved_pct = if task.file_size > 0 {
             ((task.file_size as f32 - compressed_size as f32) / task.file_size as f32 * 100.0).max(0.0)
-        } else {
-            0.0
-        };
+        } else { 0.0 };
 
         emit_fmt(&app, &task.id, &FmtResult {
             fmt: fmt.clone(),
@@ -380,80 +348,82 @@ async fn compress_task(
     }
 }
 
-// ── Tauri commands ─────────────────────────────────────────────────────────
+// ── Commands (in submodule to avoid generate_handler! namespace conflict) ──
 
-#[tauri::command]
-pub async fn get_settings(state: tauri::State<'_, AppState>) -> Result<AppSettings, String> {
-    Ok(state.settings.lock().await.clone())
-}
+mod commands {
+    use super::*;
 
-#[tauri::command]
-pub async fn save_settings(
-    state: tauri::State<'_, AppState>,
-    settings: AppSettings,
-) -> Result<(), String> {
-    *state.settings.lock().await = settings;
-    Ok(())
-}
+    #[tauri::command]
+    pub async fn get_settings(state: tauri::State<'_, AppState>) -> Result<AppSettings, String> {
+        Ok(state.settings.lock().await.clone())
+    }
 
-#[tauri::command]
-pub async fn compress_images(
-    app: AppHandle,
-    state: tauri::State<'_, AppState>,
-    tasks: Vec<CompressTask>,
-) -> Result<(), String> {
-    let settings = state.settings.lock().await.clone();
-    let max_concurrent = settings.max_concurrent.clamp(1, 5);
-    let client = Arc::new(build_client()?);
-    let retry = settings.retry_count;
+    #[tauri::command]
+    pub async fn save_settings(
+        state: tauri::State<'_, AppState>,
+        settings: AppSettings,
+    ) -> Result<(), String> {
+        *state.settings.lock().await = settings;
+        Ok(())
+    }
 
-    let batches: Vec<Vec<CompressTask>> = tasks.chunks(20).map(|c| c.to_vec()).collect();
+    #[tauri::command]
+    pub async fn compress_images(
+        app: AppHandle,
+        state: tauri::State<'_, AppState>,
+        tasks: Vec<CompressTask>,
+    ) -> Result<(), String> {
+        let settings = state.settings.lock().await.clone();
+        let max_concurrent = settings.max_concurrent.clamp(1, 5);
+        let client = Arc::new(build_client()?);
+        let retry = settings.retry_count;
 
-    tokio::spawn(async move {
-        for (i, batch) in batches.iter().enumerate() {
-            stream::iter(batch.clone())
-                .map(|task| {
-                    let app = app.clone();
-                    let client = client.clone();
-                    async move { compress_task(app, task, client, retry).await }
-                })
-                .buffer_unordered(max_concurrent)
-                .collect::<Vec<_>>()
-                .await;
+        let batches: Vec<Vec<CompressTask>> = tasks.chunks(20).map(|c| c.to_vec()).collect();
 
-            if i < batches.len() - 1 {
-                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        tokio::spawn(async move {
+            for (i, batch) in batches.iter().enumerate() {
+                stream::iter(batch.clone())
+                    .map(|task| {
+                        let app = app.clone();
+                        let client = client.clone();
+                        async move { compress_task(app, task, client, retry).await }
+                    })
+                    .buffer_unordered(max_concurrent)
+                    .collect::<Vec<_>>()
+                    .await;
+
+                if i < batches.len() - 1 {
+                    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                }
             }
-        }
-        let _ = app.emit("all-done", ());
-    });
+            let _ = app.emit("all-done", ());
+        });
 
-    Ok(())
-}
+        Ok(())
+    }
 
-#[tauri::command]
-pub async fn open_folder(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
+    #[tauri::command]
+    pub async fn open_folder(path: String) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
 
-    #[cfg(target_os = "macos")]
-    std::process::Command::new("open")
-        .args(["-R", &path])
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "windows")]
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
 
-    #[cfg(target_os = "windows")]
-    std::process::Command::new("explorer")
-        .args(["/select,", &path])
-        .spawn()
-        .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "linux")]
+        std::process::Command::new("xdg-open")
+            .arg(Path::new(&path).parent().unwrap_or(Path::new("/")))
+            .spawn()
+            .map_err(|e| e.to_string())?;
 
-    #[cfg(target_os = "linux")]
-    std::process::Command::new("xdg-open")
-        .arg(p.parent().unwrap_or(Path::new("/")))
-        .spawn()
-        .map_err(|e| e.to_string())?;
-
-    Ok(())
+        Ok(())
+    }
 }
 
 // ── Entry point ────────────────────────────────────────────────────────────
@@ -466,10 +436,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
-            get_settings,
-            save_settings,
-            compress_images,
-            open_folder,
+            commands::get_settings,
+            commands::save_settings,
+            commands::compress_images,
+            commands::open_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
