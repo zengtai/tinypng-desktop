@@ -1,4 +1,5 @@
 {
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "TinyPNG Desktop",
   "version": "0.1.0",
   "identifier": "com.tinypng-desktop.app",
@@ -39,10 +40,7 @@
   },
   "plugins": {
     "fs": {
-      "scope": {
-        "allow": ["$HOME/**", "$DESKTOP/**", "$DOWNLOAD/**", "$DOCUMENT/**", "$PICTURE/**"],
-        "deny": ["$HOME/.ssh/**"]
-      }
+      "requireLiteralLeadingDot": false
     },
     "dialog": {}
   }
