@@ -12,7 +12,7 @@ icon = ["icons/icon.ico", "icons/128x128.png"]
 
 [lib]
 name = "tinypng_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "tinypng-desktop"
