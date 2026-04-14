@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
-import { AppSettings, CompressTask } from '../types';
+import { AppSettings, CompressTask, FmtResult } from '../types';
 
 export const tauriApi = {
   getSettings: () => invoke<AppSettings>('get_settings'),
@@ -22,15 +22,6 @@ export const pickImages = async (): Promise<string[] | null> => {
   });
   if (!result) return null;
   return Array.isArray(result) ? result : [result];
-};
-
-export type FmtResult = {
-  fmt: string;
-  status: string;
-  compressed_size?: number;
-  saved_percent?: number;
-  output_path?: string;
-  error?: string;
 };
 
 export type FmtResultPayload = {

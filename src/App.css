@@ -152,3 +152,14 @@ html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-
 .info-box svg{flex-shrink:0;margin-top:2px;color:var(--blue)}
 .s-footer{padding-top:4px;display:flex;align-items:center;gap:12px}
 .save-ok{color:var(--green);font-size:12px;font-weight:500}
+
+/* DropZone (empty state) */
+.dropzone{flex:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:20px}
+.dropzone:hover,.dropzone.dragover{background:rgba(255,107,43,.03)}
+.dropzone.dragover .dropzone-inner{border-color:var(--accent)}
+.dropzone-inner{display:flex;flex-direction:column;align-items:center;gap:12px;border:2px dashed var(--border2);border-radius:16px;padding:56px 80px;background:rgba(255,255,255,.01);transition:all .2s;color:var(--text2)}
+.dropzone-icon{color:var(--accent)}
+.dropzone-title{font-size:18px;font-weight:600;color:var(--text)}
+.dropzone-sub{font-size:13px}
+.dropzone-sub .link{color:var(--accent);font-weight:500}
+.dropzone-hint{font-size:11px;color:var(--text3)}
