@@ -10,14 +10,12 @@ export const tauriApi = {
   openFolder: (path: string) => invoke<void>('open_folder', { path }),
 };
 
-// Persistent settings — saved alongside the executable (portable-friendly)
-// Path resolved by Rust command: get_config_path -> <exe_dir>/settings.json
+// ── Persistent settings (read/write done in Rust, no fs scope issues) ──────
 
 export async function loadPersistedSettings(): Promise<Partial<AppSettings>> {
   try {
-    const path = await invoke<string>('get_config_path');
-    const { readTextFile } = await import('@tauri-apps/plugin-fs');
-    const text = await readTextFile(path);
+    const text = await invoke<string>('load_settings_file');
+    if (!text) return {};
     return JSON.parse(text) as Partial<AppSettings>;
   } catch {
     return {};
@@ -25,24 +23,16 @@ export async function loadPersistedSettings(): Promise<Partial<AppSettings>> {
 }
 
 export async function persistSettings(settings: AppSettings): Promise<void> {
-  try {
-    const path = await invoke<string>('get_config_path');
-    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-    await writeTextFile(path, JSON.stringify(settings, null, 2));
-  } catch (e) {
-    console.error('Failed to persist settings:', e);
-  }
+  await invoke<void>('save_settings_file', {
+    content: JSON.stringify(settings, null, 2),
+  });
 }
 
 export async function clearPersistedSettings(): Promise<void> {
-  try {
-    const path = await invoke<string>('get_config_path');
-    const { remove } = await import('@tauri-apps/plugin-fs');
-    await remove(path);
-  } catch {
-    // File may not exist, ignore
-  }
+  await invoke<void>('clear_settings_file');
 }
+
+// ── File pickers ────────────────────────────────────────────────────────────
 
 export const pickDirectory = async (): Promise<string | null> => {
   const result = await open({ directory: true, multiple: false });
@@ -57,6 +47,8 @@ export const pickImages = async (): Promise<string[] | null> => {
   if (!result) return null;
   return Array.isArray(result) ? result : [result];
 };
+
+// ── Event listeners ─────────────────────────────────────────────────────────
 
 export type FmtResultPayload = {
   task_id: string;

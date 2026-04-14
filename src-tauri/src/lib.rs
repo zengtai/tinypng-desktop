@@ -348,6 +348,14 @@ async fn compress_task(
     }
 }
 
+// ── Config path helper ────────────────────────────────────────────────────
+
+fn config_path() -> Result<std::path::PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let dir = exe.parent().ok_or_else(|| "Cannot get exe directory".to_string())?;
+    Ok(dir.join("settings.json"))
+}
+
 // ── Commands (in submodule to avoid generate_handler! namespace conflict) ──
 
 mod commands {
@@ -403,12 +411,27 @@ mod commands {
     }
 
     #[tauri::command]
-    pub fn get_config_path() -> Result<String, String> {
-        let exe = std::env::current_exe()
-            .map_err(|e| e.to_string())?;
-        let dir = exe.parent()
-            .ok_or_else(|| "Cannot get exe directory".to_string())?;
-        Ok(dir.join("settings.json").to_string_lossy().to_string())
+    pub fn load_settings_file() -> Result<String, String> {
+        let path = config_path()?;
+        if !path.exists() {
+            return Ok(String::new());
+        }
+        std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn save_settings_file(content: String) -> Result<(), String> {
+        let path = config_path()?;
+        std::fs::write(&path, content).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn clear_settings_file() -> Result<(), String> {
+        let path = config_path()?;
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        }
+        Ok(())
     }
 
     #[tauri::command]
@@ -449,7 +472,9 @@ pub fn run() {
             commands::save_settings,
             commands::compress_images,
             commands::open_folder,
-            commands::get_config_path,
+            commands::load_settings_file,
+            commands::save_settings_file,
+            commands::clear_settings_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
