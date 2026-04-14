@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/dm-sans-400.woff2') format('woff2')}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/dm-sans-500.woff2') format('woff2')}
+@font-face{font-family:'DM Sans';font-style:normal;font-weight:600;font-display:swap;src:url('/assets/fonts/dm-sans-600.woff2') format('woff2')}
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/assets/fonts/dm-mono-400.woff2') format('woff2')}
+@font-face{font-family:'DM Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/assets/fonts/dm-mono-500.woff2') format('woff2')}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -69,7 +73,7 @@ html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-
 .drag-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,107,43,.06);border:2px dashed var(--accent);font-size:16px;font-weight:600;color:var(--accent);pointer-events:none;z-index:10}
 
 /* File card */
-.file-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;transition:border-color .15s}
+.file-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);transition:border-color .15s;flex-shrink:0}
 .file-card.st-done{border-color:rgba(46,204,143,.2)}
 .file-card.st-busy{border-color:rgba(245,183,49,.15)}
 
@@ -85,7 +89,7 @@ html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-
 .card-rm:hover{color:var(--red)}
 .card-rm:disabled{opacity:.3;cursor:not-allowed}
 
-.card-body{padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+.card-body{padding:10px 14px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border)}
 .card-fmts{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
 .card-tiles{display:flex;gap:8px;flex-wrap:wrap}
 .card-fchip{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;cursor:pointer;border:1.5px solid var(--border2);background:transparent;color:var(--text2);transition:all .12s;font-family:'DM Mono',monospace;user-select:none}
