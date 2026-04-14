@@ -3,9 +3,8 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Emitter};
-use reqwest::multipart;
-use base64::{Engine as _, engine::general_purpose};
+use tauri::{AppHandle, Emitter};
+use futures::stream::{self, StreamExt};
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -15,21 +14,21 @@ pub struct CompressTask {
     pub file_path: String,
     pub file_name: String,
     pub file_size: u64,
-    pub output_format: Option<String>, // "webp" | "avif" | "png" | "jpeg" | None (keep original)
+    pub formats: Vec<String>, // ["webp", "png", "avif"] etc.
     pub output_dir: Option<String>,
-    pub suffix: Option<String>,        // e.g. "_tiny"
+    pub suffix: String,
+    pub overwrite: bool,
+    pub fmt_folder: bool, // save into per-format subfolders
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskResult {
-    pub id: String,
-    pub status: String,        // "pending" | "uploading" | "converting" | "done" | "error"
-    pub original_size: u64,
+pub struct FmtResult {
+    pub fmt: String,
+    pub status: String, // "uploading" | "processing" | "done" | "error"
     pub compressed_size: Option<u64>,
     pub saved_percent: Option<f32>,
     pub output_path: Option<String>,
     pub error: Option<String>,
-    pub output_format: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,8 +36,8 @@ pub struct AppSettings {
     pub output_dir: Option<String>,
     pub output_suffix: String,
     pub overwrite_original: bool,
-    pub default_output_format: Option<String>,
-    pub max_concurrent: usize,    // per-batch concurrency (1-5)
+    pub fmt_folder: bool,
+    pub max_concurrent: usize,
     pub retry_count: u32,
 }
 
@@ -48,347 +47,397 @@ impl Default for AppSettings {
             output_dir: None,
             output_suffix: "_tiny".to_string(),
             overwrite_original: false,
-            default_output_format: None,
+            fmt_folder: false,
             max_concurrent: 3,
             retry_count: 2,
         }
     }
 }
 
-// TinyPNG upload response
+// TinyPNG store response
 #[derive(Debug, Deserialize)]
-struct TinyPngOutput {
+struct StoreResponse {
+    key: String,
+    size: u64,
+}
+
+// TinyPNG process response
+#[derive(Debug, Deserialize)]
+struct ProcessResponse {
+    url: String,
     size: u64,
     #[serde(rename = "type")]
     mime_type: String,
-    url: String,
-    width: Option<u32>,
-    height: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
-struct TinyPngResponse {
-    output: TinyPngOutput,
-}
-
-// Convert request body
 #[derive(Debug, Serialize)]
-struct ConvertResize {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    convert: Option<ConvertOptions>,
+struct ProcessBody {
+    key: String,
+    #[serde(rename = "originalType")]
+    original_type: String,
+    #[serde(rename = "originalSize")]
+    original_size: u64,
+    convert: ConvertOptions,
 }
 
 #[derive(Debug, Serialize)]
 struct ConvertOptions {
     #[serde(rename = "type")]
-    output_type: Vec<String>,
+    mime_type: String,
 }
 
-// ── State ──────────────────────────────────────────────────────────────────
+// ── App State ──────────────────────────────────────────────────────────────
 
 pub struct AppState {
     pub settings: Mutex<AppSettings>,
-    pub results: Mutex<HashMap<String, TaskResult>>,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
             settings: Mutex::new(AppSettings::default()),
-            results: Mutex::new(HashMap::new()),
         }
     }
 }
 
-// ── Core compression logic ─────────────────────────────────────────────────
+// ── HTTP helpers ───────────────────────────────────────────────────────────
 
-async fn compress_single(
-    app: &AppHandle,
-    task: CompressTask,
-    settings: AppSettings,
-    client: &reqwest::Client,
-) -> TaskResult {
-    let id = task.id.clone();
-
-    // Emit: uploading
-    emit_status(app, &id, "uploading", None, None, None, None);
-
-    // Read file
-    let file_bytes = match tokio::fs::read(&task.file_path).await {
-        Ok(b) => b,
-        Err(e) => {
-            let err = format!("读取文件失败: {e}");
-            emit_status(app, &id, "error", None, None, None, Some(&err));
-            return TaskResult {
-                id,
-                status: "error".into(),
-                original_size: task.file_size,
-                compressed_size: None,
-                saved_percent: None,
-                output_path: None,
-                error: Some(err),
-                output_format: task.output_format.clone(),
-            };
-        }
-    };
-
-    let file_name = task.file_name.clone();
-    let mime = mime_guess::from_path(&task.file_path)
-        .first_or_octet_stream()
-        .to_string();
-
-    // Upload to TinyPNG (simulating browser multipart upload)
-    let part = multipart::Part::bytes(file_bytes.clone())
-        .file_name(file_name.clone())
-        .mime_str(&mime)
-        .unwrap();
-
-    let form = multipart::Form::new().part("input", part);
-
-    let upload_result = client
-        .post("https://tinypng.com/web/shrink")
-        .header("Origin", "https://tinypng.com")
-        .header("Referer", "https://tinypng.com/")
-        .header("Accept", "application/json")
-        .header("X-Requested-With", "XMLHttpRequest")
-        .multipart(form)
-        .send()
-        .await;
-
-    let response = match upload_result {
-        Ok(r) => r,
-        Err(e) => {
-            let err = format!("上传失败: {e}");
-            emit_status(app, &id, "error", None, None, None, Some(&err));
-            return make_error_result(id, task.file_size, task.output_format, err);
-        }
-    };
-
-    if !response.status().is_success() {
-        let status_code = response.status().as_u16();
-        let body = response.text().await.unwrap_or_default();
-        let err = format!("TinyPNG 返回错误 {status_code}: {body}");
-        emit_status(app, &id, "error", None, None, None, Some(&err));
-        return make_error_result(id, task.file_size, task.output_format, err);
-    }
-
-    // Parse the Location header (TinyPNG returns compressed file URL in Location)
-    let tiny_response: TinyPngResponse = match response.json().await {
-        Ok(r) => r,
-        Err(e) => {
-            let err = format!("解析响应失败: {e}");
-            emit_status(app, &id, "error", None, None, None, Some(&err));
-            return make_error_result(id, task.file_size, task.output_format, err);
-        }
-    };
-
-    let compressed_url = tiny_response.output.url.clone();
-    let compressed_size_from_api = tiny_response.output.size;
-    let api_output_format = tiny_response.output.mime_type.clone();
-
-    // Determine actual output format
-    let desired_format = task.output_format
-        .clone()
-        .or_else(|| settings.default_output_format.clone());
-
-    // If format conversion needed, POST to the output URL with convert options
-    let final_bytes: Vec<u8>;
-    let final_format: String;
-    let final_size: u64;
-
-    if let Some(ref fmt) = desired_format {
-        // Emit: converting
-        emit_status(app, &id, "converting", Some(compressed_size_from_api), None, None, None);
-
-        let convert_body = ConvertResize {
-            convert: Some(ConvertOptions {
-                output_type: vec![fmt.clone()],
-            }),
-        };
-
-        let convert_resp = client
-            .get(&compressed_url)
-            .header("Origin", "https://tinypng.com")
-            .header("Referer", "https://tinypng.com/")
-            .json(&convert_body)
-            .send()
-            .await;
-
-        // Actually TinyPNG convert uses a POST to same URL with JSON body
-        let convert_resp = client
-            .post(&compressed_url)
-            .header("Origin", "https://tinypng.com")
-            .header("Referer", "https://tinypng.com/")
-            .header("Content-Type", "application/json")
-            .json(&convert_body)
-            .send()
-            .await;
-
-        match convert_resp {
-            Ok(r) if r.status().is_success() => {
-                // The response is the new output metadata
-                let convert_meta: TinyPngResponse = match r.json().await {
-                    Ok(m) => m,
-                    Err(_) => {
-                        // fallback: just download compressed without conversion
-                        let bytes = download_bytes(client, &compressed_url).await
-                            .unwrap_or_default();
-                        final_bytes = bytes;
-                        final_format = format_from_mime(&api_output_format);
-                        final_size = final_bytes.len() as u64;
-                        return save_result(app, task, settings, id, final_bytes, final_size, final_format).await;
-                    }
-                };
-                let new_url = convert_meta.output.url;
-                final_bytes = download_bytes(client, &new_url).await.unwrap_or_default();
-                final_format = fmt.clone();
-                final_size = final_bytes.len() as u64;
-            }
-            _ => {
-                // Fallback: download without conversion
-                final_bytes = download_bytes(client, &compressed_url).await.unwrap_or_default();
-                final_format = format_from_mime(&api_output_format);
-                final_size = final_bytes.len() as u64;
-            }
-        }
-    } else {
-        // No conversion, just download compressed file
-        final_bytes = download_bytes(client, &compressed_url).await.unwrap_or_default();
-        final_format = format_from_mime(&api_output_format);
-        final_size = compressed_size_from_api;
-    }
-
-    save_result(app, task, settings, id, final_bytes, final_size, final_format).await
+fn build_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())
 }
 
-async fn save_result(
-    app: &AppHandle,
-    task: CompressTask,
-    settings: AppSettings,
-    id: String,
-    bytes: Vec<u8>,
-    compressed_size: u64,
-    output_format: String,
-) -> TaskResult {
-    // Determine output path
-    let input_path = Path::new(&task.file_path);
-    let stem = input_path.file_stem().unwrap_or_default().to_string_lossy();
+fn base_headers() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("Origin", "https://tinypng.com"),
+        ("Referer", "https://tinypng.com/"),
+        ("Accept", "application/json"),
+    ]
+}
 
-    let ext = match output_format.as_str() {
-        "webp" => "webp",
-        "avif" => "avif",
-        "jpeg" | "jpg" => "jpg",
+fn fmt_to_mime(fmt: &str) -> &'static str {
+    match fmt {
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "jpeg" | "jpg" => "image/jpeg",
+        "jxl" => "image/jxl",
+        _ => "image/png",
+    }
+}
+
+fn mime_to_ext(mime: &str) -> &'static str {
+    match mime {
+        "image/webp" => "webp",
+        "image/avif" => "avif",
+        "image/jpeg" => "jpg",
+        "image/jxl" => "jxl",
         _ => "png",
-    };
-
-    let out_filename = if settings.overwrite_original {
-        task.file_name.clone()
-    } else {
-        let suffix = task.suffix.clone().unwrap_or(settings.output_suffix.clone());
-        format!("{stem}{suffix}.{ext}")
-    };
-
-    let out_dir = task.output_dir
-        .clone()
-        .or_else(|| settings.output_dir.clone())
-        .unwrap_or_else(|| {
-            input_path.parent()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or(".".to_string())
-        });
-
-    let out_path = Path::new(&out_dir).join(&out_filename);
-
-    if let Err(e) = tokio::fs::create_dir_all(&out_dir).await {
-        let err = format!("创建输出目录失败: {e}");
-        emit_status(app, &id, "error", None, None, None, Some(&err));
-        return make_error_result(id, task.file_size, Some(output_format), err);
-    }
-
-    if let Err(e) = tokio::fs::write(&out_path, &bytes).await {
-        let err = format!("保存文件失败: {e}");
-        emit_status(app, &id, "error", None, None, None, Some(&err));
-        return make_error_result(id, task.file_size, Some(output_format), err);
-    }
-
-    let saved_pct = if task.file_size > 0 {
-        let saved = (task.file_size as f32 - compressed_size as f32) / task.file_size as f32 * 100.0;
-        Some(saved.max(0.0))
-    } else {
-        None
-    };
-
-    let out_path_str = out_path.to_string_lossy().to_string();
-
-    emit_status(
-        app, &id, "done",
-        Some(compressed_size),
-        saved_pct,
-        Some(&out_path_str),
-        None,
-    );
-
-    TaskResult {
-        id,
-        status: "done".into(),
-        original_size: task.file_size,
-        compressed_size: Some(compressed_size),
-        saved_percent: saved_pct,
-        output_path: Some(out_path_str),
-        error: None,
-        output_format: Some(output_format),
     }
 }
 
-async fn download_bytes(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, String> {
-    let resp = client.get(url)
+// ── Core compression ───────────────────────────────────────────────────────
+
+async fn store_image(
+    client: &reqwest::Client,
+    image_bytes: Vec<u8>,
+    content_type: &str,
+) -> Result<StoreResponse, String> {
+    let mut req = client
+        .post("https://tinypng.com/backend/opt/store")
+        .header("Content-Type", content_type);
+
+    for (k, v) in base_headers() {
+        req = req.header(k, v);
+    }
+
+    let resp = req
+        .body(image_bytes)
+        .send()
+        .await
+        .map_err(|e| format!("store request failed: {e}"))?;
+
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(format!("store {status}: {}", &body[..body.len().min(200)]));
+    }
+
+    serde_json::from_str(&body).map_err(|e| format!("store parse error: {e} body={body}"))
+}
+
+async fn process_image(
+    client: &reqwest::Client,
+    key: &str,
+    original_type: &str,
+    original_size: u64,
+    output_fmt: &str,
+) -> Result<ProcessResponse, String> {
+    let body = ProcessBody {
+        key: key.to_string(),
+        original_type: original_type.to_string(),
+        original_size,
+        convert: ConvertOptions {
+            mime_type: fmt_to_mime(output_fmt).to_string(),
+        },
+    };
+
+    let mut req = client
+        .post("https://tinypng.com/backend/opt/process")
+        .header("Content-Type", "application/json");
+
+    for (k, v) in base_headers() {
+        req = req.header(k, v);
+    }
+
+    let resp = req
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("process request failed: {e}"))?;
+
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        return Err(format!("process {status}: {}", &text[..text.len().min(200)]));
+    }
+
+    serde_json::from_str(&text).map_err(|e| format!("process parse error: {e} body={text}"))
+}
+
+async fn download_image(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<Vec<u8>, String> {
+    let resp = client
+        .get(url)
         .header("Referer", "https://tinypng.com/")
         .send()
         .await
-        .map_err(|e| e.to_string())?;
-    resp.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
-}
+        .map_err(|e| format!("download failed: {e}"))?;
 
-fn format_from_mime(mime: &str) -> String {
-    match mime {
-        "image/webp" => "webp".to_string(),
-        "image/avif" => "avif".to_string(),
-        "image/jpeg" => "jpeg".to_string(),
-        _ => "png".to_string(),
+    if !resp.status().is_success() {
+        return Err(format!("download status: {}", resp.status()));
     }
+
+    resp.bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("download read failed: {e}"))
 }
 
-fn make_error_result(id: String, original_size: u64, fmt: Option<String>, err: String) -> TaskResult {
-    TaskResult {
-        id,
-        status: "error".into(),
-        original_size,
-        compressed_size: None,
-        saved_percent: None,
-        output_path: None,
-        error: Some(err),
-        output_format: fmt,
-    }
+fn emit_fmt_result(app: &AppHandle, task_id: &str, result: &FmtResult) {
+    let _ = app.emit("fmt-result", serde_json::json!({
+        "task_id": task_id,
+        "result": result,
+    }));
 }
 
-fn emit_status(
-    app: &AppHandle,
-    id: &str,
-    status: &str,
-    compressed_size: Option<u64>,
-    saved_percent: Option<f32>,
-    output_path: Option<&str>,
-    error: Option<&str>,
+async fn compress_task(
+    app: AppHandle,
+    task: CompressTask,
+    client: Arc<reqwest::Client>,
+    retry_count: u32,
 ) {
-    let payload = serde_json::json!({
-        "id": id,
-        "status": status,
-        "compressed_size": compressed_size,
-        "saved_percent": saved_percent,
-        "output_path": output_path,
-        "error": error,
-    });
-    let _ = app.emit("task-update", payload);
+    // Read file
+    let image_bytes = match tokio::fs::read(&task.file_path).await {
+        Ok(b) => b,
+        Err(e) => {
+            let err = format!("读取文件失败: {e}");
+            for fmt in &task.formats {
+                emit_fmt_result(&app, &task.id, &FmtResult {
+                    fmt: fmt.clone(),
+                    status: "error".into(),
+                    compressed_size: None,
+                    saved_percent: None,
+                    output_path: None,
+                    error: Some(err.clone()),
+                });
+            }
+            return;
+        }
+    };
+
+    let content_type = mime_guess::from_path(&task.file_path)
+        .first_or_octet_stream()
+        .to_string();
+
+    // Mark all formats as uploading
+    for fmt in &task.formats {
+        emit_fmt_result(&app, &task.id, &FmtResult {
+            fmt: fmt.clone(),
+            status: "uploading".into(),
+            compressed_size: None,
+            saved_percent: None,
+            output_path: None,
+            error: None,
+        });
+    }
+
+    // Step 1: store once
+    let store_result = {
+        let mut last_err = String::new();
+        let mut result = None;
+        for attempt in 0..=retry_count {
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(1500 * attempt as u64)).await;
+            }
+            match store_image(&client, image_bytes.clone(), &content_type).await {
+                Ok(r) => { result = Some(r); break; }
+                Err(e) => { last_err = e; }
+            }
+        }
+        result.ok_or(last_err)
+    };
+
+    let store = match store_result {
+        Ok(s) => s,
+        Err(e) => {
+            for fmt in &task.formats {
+                emit_fmt_result(&app, &task.id, &FmtResult {
+                    fmt: fmt.clone(),
+                    status: "error".into(),
+                    compressed_size: None,
+                    saved_percent: None,
+                    output_path: None,
+                    error: Some(e.clone()),
+                });
+            }
+            return;
+        }
+    };
+
+    // Step 2: process + download each format serially
+    for (i, fmt) in task.formats.iter().enumerate() {
+        if i > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        }
+
+        // Mark as processing
+        emit_fmt_result(&app, &task.id, &FmtResult {
+            fmt: fmt.clone(),
+            status: "processing".into(),
+            compressed_size: None,
+            saved_percent: None,
+            output_path: None,
+            error: None,
+        });
+
+        // Process with retry
+        let process_result = {
+            let mut last_err = String::new();
+            let mut result = None;
+            for attempt in 0..=retry_count {
+                if attempt > 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(1500 * attempt as u64)).await;
+                }
+                match process_image(&client, &store.key, &content_type, store.size, fmt).await {
+                    Ok(r) => { result = Some(r); break; }
+                    Err(e) => { last_err = e; }
+                }
+            }
+            result.ok_or(last_err)
+        };
+
+        let proc = match process_result {
+            Ok(p) => p,
+            Err(e) => {
+                emit_fmt_result(&app, &task.id, &FmtResult {
+                    fmt: fmt.clone(),
+                    status: "error".into(),
+                    compressed_size: None,
+                    saved_percent: None,
+                    output_path: None,
+                    error: Some(e),
+                });
+                continue;
+            }
+        };
+
+        // Download
+        let bytes = match download_image(&client, &proc.url).await {
+            Ok(b) => b,
+            Err(e) => {
+                emit_fmt_result(&app, &task.id, &FmtResult {
+                    fmt: fmt.clone(),
+                    status: "error".into(),
+                    compressed_size: None,
+                    saved_percent: None,
+                    output_path: None,
+                    error: Some(e),
+                });
+                continue;
+            }
+        };
+
+        // Build output path
+        let ext = mime_to_ext(&proc.mime_type);
+        let input_path = Path::new(&task.file_path);
+        let stem = input_path.file_stem().unwrap_or_default().to_string_lossy();
+        let filename = if task.overwrite {
+            format!("{stem}.{ext}")
+        } else {
+            format!("{stem}{}.{ext}", task.suffix)
+        };
+
+        let base_dir = task.output_dir.clone().unwrap_or_else(|| {
+            input_path.parent()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| ".".to_string())
+        });
+
+        let out_dir = if task.fmt_folder {
+            format!("{base_dir}/{fmt}")
+        } else {
+            base_dir
+        };
+
+        let out_path = Path::new(&out_dir).join(&filename);
+
+        if let Err(e) = tokio::fs::create_dir_all(&out_dir).await {
+            emit_fmt_result(&app, &task.id, &FmtResult {
+                fmt: fmt.clone(),
+                status: "error".into(),
+                compressed_size: None,
+                saved_percent: None,
+                output_path: None,
+                error: Some(format!("创建目录失败: {e}")),
+            });
+            continue;
+        }
+
+        if let Err(e) = tokio::fs::write(&out_path, &bytes).await {
+            emit_fmt_result(&app, &task.id, &FmtResult {
+                fmt: fmt.clone(),
+                status: "error".into(),
+                compressed_size: None,
+                saved_percent: None,
+                output_path: None,
+                error: Some(format!("保存文件失败: {e}")),
+            });
+            continue;
+        }
+
+        let compressed_size = bytes.len() as u64;
+        let saved_pct = if task.file_size > 0 {
+            ((task.file_size as f32 - compressed_size as f32) / task.file_size as f32 * 100.0).max(0.0)
+        } else {
+            0.0
+        };
+
+        emit_fmt_result(&app, &task.id, &FmtResult {
+            fmt: fmt.clone(),
+            status: "done".into(),
+            compressed_size: Some(compressed_size),
+            saved_percent: Some(saved_pct),
+            output_path: Some(out_path.to_string_lossy().to_string()),
+            error: None,
+        });
+    }
 }
 
 // ── Tauri commands ─────────────────────────────────────────────────────────
@@ -416,78 +465,33 @@ pub async fn compress_images(
     let settings = state.settings.lock().await.clone();
     let max_concurrent = settings.max_concurrent.clamp(1, 5);
 
-    // Build reqwest client with browser-like headers
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-        .cookie_store(true)
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = Arc::new(build_client()?);
+    let retry = settings.retry_count;
 
-    let client = Arc::new(client);
-    let settings = Arc::new(settings);
-
-    // Initialize all tasks as pending
-    {
-        let mut results = state.results.lock().await;
-        for task in &tasks {
-            results.insert(task.id.clone(), TaskResult {
-                id: task.id.clone(),
-                status: "pending".into(),
-                original_size: task.file_size,
-                compressed_size: None,
-                saved_percent: None,
-                output_path: None,
-                error: None,
-                output_format: task.output_format.clone(),
-            });
-            emit_status(&app, &task.id, "pending", None, None, None, None);
-        }
-    }
-
-    // Process in batches of 20 (TinyPNG limit), with max_concurrent inside each batch
-    let batches: Vec<Vec<CompressTask>> = tasks
-        .chunks(20)
-        .map(|c| c.to_vec())
-        .collect();
-
-    let app_clone = app.clone();
-    let state_results = Arc::new(Mutex::new(Vec::<TaskResult>::new()));
+    // Batch into groups of 20, process with concurrency within each batch
+    let batches: Vec<Vec<CompressTask>> = tasks.chunks(20).map(|c| c.to_vec()).collect();
 
     tokio::spawn(async move {
-        for batch in batches {
-            use futures::stream::{self, StreamExt};
-
-            let results: Vec<TaskResult> = stream::iter(batch)
+        for (i, batch) in batches.iter().enumerate() {
+            stream::iter(batch.clone())
                 .map(|task| {
-                    let app = app_clone.clone();
+                    let app = app.clone();
                     let client = client.clone();
-                    let settings = settings.clone();
                     async move {
-                        compress_single(&app, task, (*settings).clone(), &client).await
+                        compress_task(app, task, client, retry).await;
                     }
                 })
                 .buffer_unordered(max_concurrent)
-                .collect()
+                .collect::<Vec<_>>()
                 .await;
 
-            let mut all = state_results.lock().await;
-            all.extend(results);
-
-            // Small delay between batches to be polite
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if i < batches.len() - 1 {
+                tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+            }
         }
-
-        // Emit all done
-        let _ = app_clone.emit("all-done", ());
+        let _ = app.emit("all-done", ());
     });
 
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn cancel_tasks(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    // In a full impl, you'd use a cancellation token
     Ok(())
 }
 
@@ -507,14 +511,14 @@ pub async fn open_folder(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     std::process::Command::new("xdg-open")
-        .arg(std::path::Path::new(&path).parent().unwrap_or(std::path::Path::new("/")))
+        .arg(Path::new(&path).parent().unwrap_or(Path::new("/")))
         .spawn()
         .map_err(|e| e.to_string())?;
 
     Ok(())
 }
 
-// ── App entry ──────────────────────────────────────────────────────────────
+// ── Entry point ────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -527,7 +531,6 @@ pub fn run() {
             get_settings,
             save_settings,
             compress_images,
-            cancel_tasks,
             open_folder,
         ])
         .run(tauri::generate_context!())

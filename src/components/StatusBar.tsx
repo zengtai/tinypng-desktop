@@ -4,56 +4,37 @@ import { formatBytes } from '../utils/format';
 
 export default function StatusBar() {
   const { files, isProcessing } = useAppStore();
+  if (!files.length) return (
+    <footer className="status-bar">
+      <span className="status-hint">TinyPNG Desktop — 自动批量队列，无数量限制</span>
+    </footer>
+  );
 
   const total = files.length;
-  const done = files.filter((f) => f.result?.status === 'done').length;
-  const errors = files.filter((f) => f.result?.status === 'error').length;
-  const processing = files.filter(
-    (f) => f.result?.status === 'uploading' || f.result?.status === 'converting'
-  ).length;
+  const allFmtsDone = (f: any) => [...f.formats].every((fmt: string) => f.results[fmt]?.status === 'done');
+  const done = files.filter(allFmtsDone).length;
+  const errors = files.filter(f => [...f.formats].some((fmt: string) => f.results[fmt]?.status === 'error')).length;
+  const batches = Math.ceil(total / 20);
 
-  const originalTotal = files.reduce((sum, f) => sum + f.file_size, 0);
-  const compressedTotal = files.reduce(
-    (sum, f) => sum + (f.result?.compressed_size ?? 0),
-    0
-  );
-  const savedTotal = originalTotal - compressedTotal;
-
-  const batchCount = Math.ceil(total / 20);
-
-  if (total === 0) {
-    return (
-      <footer className="status-bar">
-        <span className="status-hint">TinyPNG Desktop — 自动批量队列，无数量限制</span>
-      </footer>
-    );
-  }
+  const savedBytes = files.reduce((sum, f) => {
+    return sum + [...f.formats].reduce((s, fmt) => {
+      const r = f.results[fmt];
+      return r?.status === 'done' ? s + f.file_size - (r.compressed_size || 0) : s;
+    }, 0);
+  }, 0);
 
   return (
     <footer className="status-bar">
-      <div className="status-left">
-        {isProcessing ? (
-          <span className="status-active">
-            处理中 {processing}/{total}
-            {batchCount > 1 && <span className="batch-tag">{batchCount} 批</span>}
-          </span>
-        ) : (
-          <span>
-            共 {total} 张
-            {batchCount > 1 && <span className="batch-tag">将分 {batchCount} 批</span>}
-          </span>
-        )}
-        {errors > 0 && (
-          <span className="status-error">{errors} 失败</span>
-        )}
+      <div className="sb-l">
+        {isProcessing
+          ? <span className="status-active">处理中 {done}/{total}</span>
+          : <span>{total} 张</span>}
+        {batches > 1 && <span className="batch-tag">将分 {batches} 批</span>}
+        {errors > 0 && <span className="status-error">{errors} 失败</span>}
       </div>
       {done > 0 && (
-        <div className="status-right">
-          <span className="status-saved">
-            节省 {formatBytes(savedTotal)}
-            {' '}
-            ({done} / {total} 完成)
-          </span>
+        <div className="sb-r">
+          <span className="status-saved">节省 {formatBytes(savedBytes)} ({done}/{total} 完成)</span>
         </div>
       )}
     </footer>

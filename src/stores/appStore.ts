@@ -1,8 +1,11 @@
 import { create } from 'zustand';
-import { FileItem, AppSettings, TaskResult, OutputFormat } from '../types';
+import { FileItem, AppSettings, FmtResult } from '../types';
+
+const ALL_FMTS = ['avif', 'jxl', 'webp', 'jpeg', 'png'];
 
 interface AppStore {
   files: FileItem[];
+  globalFormats: Set<string>;
   settings: AppSettings;
   isProcessing: boolean;
   activeTab: 'compress' | 'settings';
@@ -11,55 +14,56 @@ interface AppStore {
   removeFile: (id: string) => void;
   clearFiles: () => void;
   clearDone: () => void;
-  updateResult: (id: string, result: Partial<TaskResult>) => void;
+  updateFmtResult: (taskId: string, fmt: string, result: FmtResult) => void;
   setProcessing: (v: boolean) => void;
   setSettings: (s: AppSettings) => void;
   setActiveTab: (t: 'compress' | 'settings') => void;
-  setFileFormat: (id: string, fmt: OutputFormat) => void;
+  setGlobalFormats: (fmts: Set<string>) => void;
+  applyGlobalFormats: () => void;
+  toggleFileFmt: (id: string, fmt: string) => void;
 }
 
 const defaultSettings: AppSettings = {
   output_dir: null,
   output_suffix: '_tiny',
   overwrite_original: false,
-  default_output_format: null,
+  fmt_folder: false,
   max_concurrent: 3,
   retry_count: 2,
 };
 
-export const useAppStore = create<AppStore>((set) => ({
+export const useAppStore = create<AppStore>((set, get) => ({
   files: [],
+  globalFormats: new Set(['webp', 'jpeg', 'png']),
   settings: defaultSettings,
   isProcessing: false,
   activeTab: 'compress',
 
   addFiles: (newFiles) =>
     set((state) => {
-      const existingPaths = new Set(state.files.map((f) => f.file_path));
-      const unique = newFiles.filter((f) => !existingPaths.has(f.file_path));
+      const existing = new Set(state.files.map(f => f.file_path));
+      const unique = newFiles.filter(f => !existing.has(f.file_path));
       return { files: [...state.files, ...unique] };
     }),
 
   removeFile: (id) =>
-    set((state) => ({ files: state.files.filter((f) => f.id !== id) })),
+    set((state) => ({ files: state.files.filter(f => f.id !== id) })),
 
   clearFiles: () => set({ files: [] }),
 
   clearDone: () =>
     set((state) => ({
-      files: state.files.filter((f) => f.result?.status !== 'done'),
+      files: state.files.filter(f => {
+        const fmts = [...f.formats];
+        return !fmts.every(fmt => f.results[fmt]?.status === 'done');
+      }),
     })),
 
-  updateResult: (id, partial) =>
+  updateFmtResult: (taskId, fmt, result) =>
     set((state) => ({
-      files: state.files.map((f) => {
-        if (f.id !== id) return f;
-        const prev = f.result ?? {
-          id,
-          status: 'pending' as const,
-          original_size: f.file_size,
-        };
-        return { ...f, result: { ...prev, ...partial } };
+      files: state.files.map(f => {
+        if (f.id !== taskId) return f;
+        return { ...f, results: { ...f.results, [fmt]: result } };
       }),
     })),
 
@@ -67,10 +71,30 @@ export const useAppStore = create<AppStore>((set) => ({
   setSettings: (s) => set({ settings: s }),
   setActiveTab: (t) => set({ activeTab: t }),
 
-  setFileFormat: (id, fmt) =>
+  setGlobalFormats: (fmts) => set({ globalFormats: fmts }),
+
+  applyGlobalFormats: () =>
     set((state) => ({
-      files: state.files.map((f) =>
-        f.id === id ? { ...f, output_format: fmt } : f
-      ),
+      files: state.files.map(f => {
+        const allDone = [...f.formats].every(fmt => f.results[fmt]?.status === 'done');
+        if (allDone) return f;
+        return { ...f, formats: new Set(state.globalFormats) };
+      }),
+    })),
+
+  toggleFileFmt: (id, fmt) =>
+    set((state) => ({
+      files: state.files.map(f => {
+        if (f.id !== id) return f;
+        const fmts = new Set(f.formats);
+        if (fmts.has(fmt)) {
+          if (fmts.size > 1) fmts.delete(fmt);
+        } else {
+          fmts.add(fmt);
+        }
+        return { ...f, formats: fmts };
+      }),
     })),
 }));
+
+export { ALL_FMTS };
