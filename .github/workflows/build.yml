@@ -2,7 +2,7 @@ name: Build TinyPNG Desktop
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 env:
@@ -30,60 +30,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          cache-on-failure: false
 
       - name: Install frontend dependencies
         run: npm install
-
-      - name: Create icons
-        shell: powershell
-        run: |
-          $iconDir = "src-tauri\icons"
-          New-Item -ItemType Directory -Force -Path $iconDir
-          Add-Type -AssemblyName System.Drawing
-
-          function New-PngFile($path, $size) {
-            $bmp = New-Object System.Drawing.Bitmap($size, $size)
-            $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.Clear([System.Drawing.Color]::FromArgb(255, 255, 107, 53))
-            $g.Dispose()
-            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-            $bmp.Dispose()
-          }
-
-          New-PngFile "$iconDir\32x32.png" 32
-          New-PngFile "$iconDir\128x128.png" 128
-          New-PngFile "$iconDir\128x128@2x.png" 256
-
-          $sizes = @(16, 32, 48, 256)
-          $pngDataList = @()
-          foreach ($sz in $sizes) {
-            $bmp = New-Object System.Drawing.Bitmap($sz, $sz)
-            $g = [System.Drawing.Graphics]::FromImage($bmp)
-            $g.Clear([System.Drawing.Color]::FromArgb(255, 255, 107, 53))
-            $g.Dispose()
-            $ms = New-Object System.IO.MemoryStream
-            $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-            $pngDataList += , $ms.ToArray()
-            $bmp.Dispose()
-          }
-
-          $out = New-Object System.IO.MemoryStream
-          $w = New-Object System.IO.BinaryWriter($out)
-          $w.Write([uint16]0); $w.Write([uint16]1); $w.Write([uint16]$sizes.Count)
-          $offset = [uint32](6 + 16 * $sizes.Count)
-          for ($i = 0; $i -lt $sizes.Count; $i++) {
-            $sz = if ($sizes[$i] -eq 256) { 0 } else { $sizes[$i] }
-            $w.Write([byte]$sz); $w.Write([byte]$sz)
-            $w.Write([byte]0); $w.Write([byte]0)
-            $w.Write([uint16]1); $w.Write([uint16]32)
-            $w.Write([uint32]$pngDataList[$i].Length)
-            $w.Write($offset)
-            $offset += [uint32]$pngDataList[$i].Length
-          }
-          foreach ($data in $pngDataList) { $w.Write($data) }
-          [System.IO.File]::WriteAllBytes("$iconDir\icon.ico", $out.ToArray())
-          Copy-Item "$iconDir\icon.ico" "$iconDir\icon.icns"
-          Write-Host "All icons created."
 
       - name: Build frontend
         run: npm run build
