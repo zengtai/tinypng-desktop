@@ -2,11 +2,13 @@ name: Build TinyPNG Desktop
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   build-windows:
@@ -26,6 +28,9 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
@@ -43,24 +48,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: List build output
-        if: always()
-        shell: powershell
-        run: |
-          Write-Host "=== bundle directory ==="
-          if (Test-Path "src-tauri/target/release/bundle") {
-            Get-ChildItem -Recurse "src-tauri/target/release/bundle" | Select-Object FullName
-          } else {
-            Write-Host "bundle dir not found"
-          }
-
       - name: Package portable zip
         shell: powershell
         run: |
           $exe = Get-ChildItem -Recurse "src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
           if ($exe) {
             Write-Host "Found installer: $($exe.FullName)"
-            # Run installer silently to extract files
             $installDir = "portable-extract"
             Start-Process $exe.FullName -ArgumentList "/S /D=$((Resolve-Path .).Path)\$installDir" -Wait
             if (Test-Path $installDir) {
