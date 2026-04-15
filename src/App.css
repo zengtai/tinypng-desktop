@@ -15,6 +15,16 @@
   --yellow:#f5b731;--yellow-bg:rgba(245,183,49,0.1);
   --blue:#4d9fff;--r:10px;--r2:8px;--r3:6px;
 }
+:root.light{
+  --bg:#f0f1f5;--bg2:#ffffff;--bg3:#e8eaf0;--bg4:#d8dae4;
+  --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.14);
+  --text:#1a1d2e;--text2:#5a6080;--text3:#9099b5;
+  --accent:#ff6b2b;--accent-glow:rgba(255,107,43,0.18);
+  --green:#1aaa76;--green-bg:rgba(26,170,118,0.1);--green-border:rgba(26,170,118,0.25);
+  --red:#e0334d;--red-bg:rgba(224,51,77,0.1);
+  --yellow:#d4970a;--yellow-bg:rgba(212,151,10,0.1);
+  --blue:#2d7dd6;
+}
 html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-size:13px;background:var(--bg);color:var(--text)}
 
 .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
@@ -26,6 +36,8 @@ html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-
 .tab-nav button{background:none;border:none;color:var(--text2);padding:4px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;font-family:inherit;transition:all .15s}
 .tab-nav button:hover{color:var(--text)}
 .tab-nav button.active{background:var(--bg2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.theme-btn{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:var(--r3);border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:color .15s,background .15s}
+.theme-btn:hover{background:var(--bg3);color:var(--text)}
 
 .app-main{flex:1;overflow:hidden;display:flex;flex-direction:column}
 

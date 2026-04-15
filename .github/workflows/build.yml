@@ -2,13 +2,11 @@ name: Build TinyPNG Desktop
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
   workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
 
 jobs:
   build-windows:
@@ -27,9 +25,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -60,7 +55,6 @@ jobs:
               Compress-Archive -Path "$installDir\*" -DestinationPath "TinyPNG-Desktop-portable.zip"
               Write-Host "Portable zip created"
             } else {
-              Write-Host "Extraction failed, uploading installer instead"
               Copy-Item $exe.FullName "TinyPNG-Desktop-setup.exe"
             }
           }

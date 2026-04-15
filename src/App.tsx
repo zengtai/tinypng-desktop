@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { useAppStore } from './stores/appStore';
 import { tauriApi, listenFmtResults, listenAllDone, pickImages } from './utils/tauri';
 import { CompressTask, FileItem } from './types';
@@ -15,6 +15,17 @@ export default function App() {
     files, settings, isProcessing, activeTab,
     addFiles, setProcessing, updateFmtResult, setSettings, setActiveTab,
   } = useAppStore();
+
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', theme === 'light');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 
   useEffect(() => {
     // Load from Rust state first, then merge persisted settings from disk
@@ -113,18 +124,23 @@ export default function App() {
   return (
     <div className="app" data-tab={activeTab}>
       <header className="app-header">
-        <div className="logo">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="8" fill="#FF6B35"/>
-            <path d="M8 20L14 8L20 20H8Z" fill="white" opacity="0.9"/>
-            <circle cx="14" cy="15" r="3" fill="#FF6B35"/>
-          </svg>
-          <span>TinyPNG Desktop</span>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <nav className="tab-nav">
+            <button className={activeTab === 'compress' ? 'active' : ''} onClick={() => setActiveTab('compress')}>压缩</button>
+            <button className={activeTab === 'settings' ? 'active' : ''} onClick={() => setActiveTab('settings')}>设置</button>
+          </nav>
+          <button className="theme-btn" onClick={toggleTheme} title={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}>
+            {theme === 'dark' ? (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+            )}
+          </button>
         </div>
-        <nav className="tab-nav">
-          <button className={activeTab === 'compress' ? 'active' : ''} onClick={() => setActiveTab('compress')}>压缩</button>
-          <button className={activeTab === 'settings' ? 'active' : ''} onClick={() => setActiveTab('settings')}>设置</button>
-        </nav>
       </header>
 
       <main className="app-main">
