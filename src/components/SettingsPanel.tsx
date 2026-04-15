@@ -82,7 +82,7 @@ export default function SettingsPanel() {
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <input id="suffix-el" className="s-input" value={local.output_suffix} disabled={local.overwrite_original}
                 onChange={e => set('output_suffix', e.target.value)} />
-              {(['宽','{w}'],['高','{h}']).map(([label, token]) => (
+              {[['宽','{w}'],['高','{h}']].map(([label, token]) => (
                 <button key={label} className="btn btn-ghost btn-sm" disabled={local.overwrite_original}
                   onClick={() => {
                     const el = document.getElementById('suffix-el') as HTMLInputElement;
