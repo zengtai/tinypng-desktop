@@ -67,6 +67,8 @@ struct ProcessResponse {
     size: u64,
     #[serde(rename = "type")]
     mime_type: String,
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -233,20 +235,28 @@ fn make_result(fmt: &str, status: &str, err: Option<String>) -> FmtResult {
     }
 }
 
-fn build_output_path(task: &CompressTask, ext: &str, fmt: &str) -> PathBuf {
+fn resolve_suffix(suffix: &str, width: Option<u32>, height: Option<u32>) -> String {
+    let s = suffix.replace("{w}", &width.map(|v| v.to_string()).unwrap_or_default());
+    let s = s.replace("{h}", &height.map(|v| v.to_string()).unwrap_or_default());
+    s
+}
+
+fn build_output_path(task: &CompressTask, ext: &str, fmt: &str, width: Option<u32>, height: Option<u32>) -> PathBuf {
     let input = Path::new(&task.file_path);
     let stem = input.file_stem().unwrap_or_default().to_string_lossy();
+    let folder_name = if fmt == "jpeg" { "jpg" } else { fmt };
+    let suffix = resolve_suffix(&task.suffix, width, height);
     let filename = if task.overwrite {
         format!("{stem}.{ext}")
     } else {
-        format!("{stem}{}.{ext}", task.suffix)
+        format!("{stem}{suffix}.{ext}")
     };
     let base_dir: PathBuf = task.output_dir
         .as_deref()
         .map(PathBuf::from)
         .unwrap_or_else(|| input.parent().unwrap_or(Path::new(".")).to_path_buf());
     if task.fmt_folder {
-        base_dir.join(fmt).join(filename)
+        base_dir.join(folder_name).join(filename)
     } else {
         base_dir.join(filename)
     }
@@ -318,7 +328,7 @@ async fn compress_task(
         };
 
         let ext = mime_to_ext(&proc.mime_type);
-        let out_path = build_output_path(&task, ext, fmt);
+        let out_path = build_output_path(&task, ext, fmt, proc.width, proc.height);
 
         if let Some(parent) = out_path.parent() {
             if let Err(e) = tokio::fs::create_dir_all(parent).await {
