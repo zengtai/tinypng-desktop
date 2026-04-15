@@ -76,24 +76,28 @@ export default function SettingsPanel() {
             )}
           </div>
         </div>
-        <div className="s-row">
-          <span className="s-label">文件名后缀</span>
-          <div className="s-ctrl">
-            <input className="s-input" value={local.output_suffix} disabled={local.overwrite_original}
-              onChange={e => set('output_suffix', e.target.value)} />
+        <div className="s-row" style={{alignItems:'flex-start',paddingTop:10,paddingBottom:10}}>
+          <span className="s-label" style={{paddingTop:6}}>文件名后缀</span>
+          <div className="s-ctrl" style={{flexDirection:'column',alignItems:'flex-start',gap:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <input id="suffix-el" className="s-input" value={local.output_suffix} disabled={local.overwrite_original}
+                onChange={e => set('output_suffix', e.target.value)} />
+              {(['宽','{w}'],['高','{h}']).map(([label, token]) => (
+                <button key={label} className="btn btn-ghost btn-sm" disabled={local.overwrite_original}
+                  onClick={() => {
+                    const el = document.getElementById('suffix-el') as HTMLInputElement;
+                    const start = el?.selectionStart ?? local.output_suffix.length;
+                    const end = el?.selectionEnd ?? start;
+                    const val = local.output_suffix.slice(0, start) + token + local.output_suffix.slice(end);
+                    set('output_suffix', val);
+                    setTimeout(() => { el?.focus(); el?.setSelectionRange(start+3, start+3); }, 0);
+                  }}>{label}</button>
+              ))}
+            </div>
             <span className="s-hint">
               {local.output_suffix
                 ? <>image.png → image{local.output_suffix}.png</>
-                : <>留空则无后缀</>}
-            </span>
-          </div>
-        </div>
-        <div className="s-row">
-          <span className="s-label">尺寸占位符</span>
-          <div className="s-ctrl">
-            <span className="s-hint" style={{lineHeight:'1.8'}}>
-              后缀中可使用 <code style={{background:'var(--bg4)',padding:'1px 5px',borderRadius:3,fontFamily:'DM Mono,monospace',fontSize:11}}>{'{w}'}</code> 和 <code style={{background:'var(--bg4)',padding:'1px 5px',borderRadius:3,fontFamily:'DM Mono,monospace',fontSize:11}}>{'{h}'}</code> 代表图片宽高<br/>
-              例：后缀 <code style={{background:'var(--bg4)',padding:'1px 5px',borderRadius:3,fontFamily:'DM Mono,monospace',fontSize:11}}>_{'{w}'}x{'{h}'}</code> → image_800x600.jpg
+                : <>留空则无后缀 · 可用 {'{'}w{'}'} {'{'}h{'}'} 插入宽高，如 _{'{'}w{'}'}x{'{'}h{'}'} → image_800x600.jpg</>}
             </span>
           </div>
         </div>
