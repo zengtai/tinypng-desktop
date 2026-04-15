@@ -62,8 +62,11 @@ export default function SettingsPanel() {
 
   return (
     <div className="settings-panel">
-      <h2>设置</h2>
-
+      <div className="s-header">
+        <h2>设置</h2>
+        <span className="s-version-num">v0.1.0</span>
+      </div>
+      <div className="s-grid">
       <section className="s-section">
         <h3>输出</h3>
         <div className="s-row">
@@ -146,23 +149,13 @@ export default function SettingsPanel() {
         </div>
       </section>
 
+      </div>
       <div className="s-footer">
         <button className="btn btn-primary" onClick={handleSave}>保存设置</button>
         <button className="btn btn-ghost" onClick={handleReset}>恢复默认</button>
         {saved && <span className="save-ok">✓ 已保存</span>}
       </div>
 
-      <div className="s-version">
-        <span className="s-version-num">TinyPNG Desktop v0.1.0</span>
-        <div className="s-changelog">
-          <div className="s-changelog-item"><span className="s-changelog-tag new">NEW</span><span>设置持久化，保存至程序目录</span></div>
-          <div className="s-changelog-item"><span className="s-changelog-tag new">NEW</span><span>文件名后缀支持 {'{w}'}/{'{h}'} 宽高占位符</span></div>
-          <div className="s-changelog-item"><span className="s-changelog-tag new">NEW</span><span>按格式分文件夹，jpeg 统一归入 jpg/</span></div>
-          <div className="s-changelog-item"><span className="s-changelog-tag fix">FIX</span><span>拖放文件使用 Tauri 原生 API，路径正确</span></div>
-          <div className="s-changelog-item"><span className="s-changelog-tag fix">FIX</span><span>字体本地化，离线可用</span></div>
-          <div className="s-changelog-item"><span className="s-changelog-tag imp">IMP</span><span>命令行窗口在 Release 版本中隐藏</span></div>
-        </div>
-      </div>
     </div>
   );
 }
