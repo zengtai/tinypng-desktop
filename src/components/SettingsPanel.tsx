@@ -82,7 +82,7 @@ export default function SettingsPanel() {
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <input id="suffix-el" className="s-input" value={local.output_suffix} disabled={local.overwrite_original}
                 onChange={e => set('output_suffix', e.target.value)} />
-              {[['宽','{w}'],['高','{h}']].map(([label, token]) => (
+              {([['宽','{w}'],['高','{h}']]).map(([label, token]) => (
                 <button key={label} className="btn btn-ghost btn-sm" disabled={local.overwrite_original}
                   onClick={() => {
                     const el = document.getElementById('suffix-el') as HTMLInputElement;
@@ -150,6 +150,18 @@ export default function SettingsPanel() {
         <button className="btn btn-primary" onClick={handleSave}>保存设置</button>
         <button className="btn btn-ghost" onClick={handleReset}>恢复默认</button>
         {saved && <span className="save-ok">✓ 已保存</span>}
+      </div>
+
+      <div className="s-version">
+        <span className="s-version-num">TinyPNG Desktop v0.1.0</span>
+        <div className="s-changelog">
+          <div className="s-changelog-item"><span className="s-changelog-tag new">NEW</span><span>设置持久化，保存至程序目录</span></div>
+          <div className="s-changelog-item"><span className="s-changelog-tag new">NEW</span><span>文件名后缀支持 {'{w}'}/{'{h}'} 宽高占位符</span></div>
+          <div className="s-changelog-item"><span className="s-changelog-tag new">NEW</span><span>按格式分文件夹，jpeg 统一归入 jpg/</span></div>
+          <div className="s-changelog-item"><span className="s-changelog-tag fix">FIX</span><span>拖放文件使用 Tauri 原生 API，路径正确</span></div>
+          <div className="s-changelog-item"><span className="s-changelog-tag fix">FIX</span><span>字体本地化，离线可用</span></div>
+          <div className="s-changelog-item"><span className="s-changelog-tag imp">IMP</span><span>命令行窗口在 Release 版本中隐藏</span></div>
+        </div>
       </div>
     </div>
   );
