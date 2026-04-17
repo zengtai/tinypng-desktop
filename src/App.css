@@ -113,7 +113,9 @@ html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-
 .fmt-tile{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 12px;border-radius:var(--r2);border:1.5px solid var(--border);background:var(--bg3);min-width:70px;position:relative;transition:all .15s}
 .fmt-tile.done{border-color:var(--green-border);cursor:pointer}
 .fmt-tile.done:hover{border-color:var(--green)}
-.fmt-tile.error-tile{border-color:rgba(255,77,109,.2)}
+.fmt-tile.error-tile{border-color:rgba(255,77,109,.2);position:relative}
+.tile-retry{position:absolute;bottom:4px;right:4px;padding:2px;border-radius:3px;border:1px solid rgba(255,77,109,.3);background:rgba(255,77,109,.1);color:var(--red);cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:0}
+.tile-retry:hover{background:rgba(255,77,109,.2)}
 .fmt-tile .tile-check{position:absolute;top:4px;right:4px;width:14px;height:14px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center}
 .tile-fmt{font-size:11px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text2)}
 .tile-pct{font-size:15px;font-weight:600;color:var(--green)}

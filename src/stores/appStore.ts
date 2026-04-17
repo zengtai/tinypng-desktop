@@ -21,6 +21,7 @@ interface AppStore {
   setGlobalFormats: (fmts: Set<string>) => void;
   applyGlobalFormats: () => void;
   toggleFileFmt: (id: string, fmt: string) => void;
+  clearFmtResult: (id: string, fmt: string) => void;
 }
 
 const defaultSettings: AppSettings = {
@@ -79,6 +80,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const allDone = [...f.formats].every(fmt => f.results[fmt]?.status === 'done');
         if (allDone) return f;
         return { ...f, formats: new Set(state.globalFormats) };
+      }),
+    })),
+
+  clearFmtResult: (id, fmt) =>
+    set((state) => ({
+      files: state.files.map(f => {
+        if (f.id !== id) return f;
+        const results = { ...f.results };
+        delete results[fmt];
+        return { ...f, results };
       }),
     })),
 

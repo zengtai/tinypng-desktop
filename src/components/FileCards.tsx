@@ -9,9 +9,17 @@ interface Props { onDrop: (paths: string[]) => void; }
 function FmtTile({ f, fmt }: { f: FileItem; fmt: string }) {
   const r = f.results[fmt];
   const status = r?.status || 'pending';
+  const { clearFmtResult, isProcessing } = useAppStore();
+  const [showErr, setShowErr] = useState(false);
 
   const handleClick = () => {
     if (status === 'done' && r?.output_path) tauriApi.openFolder(r.output_path);
+    if (status === 'error') setShowErr(v => !v);
+  };
+
+  const handleRetry = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    clearFmtResult(f.id, fmt);
   };
 
   if (status === 'uploading' || status === 'processing') {
@@ -35,10 +43,19 @@ function FmtTile({ f, fmt }: { f: FileItem; fmt: string }) {
     );
   }
   if (status === 'error') {
+    const errMsg = r?.error || '未知错误';
+    const shortErr = errMsg.length > 20 ? errMsg.slice(0, 20) + '…' : errMsg;
     return (
-      <div className="fmt-tile error-tile" title={r?.error || ''}>
+      <div className="fmt-tile error-tile" onClick={handleClick} style={{cursor:'pointer'}}>
         <div className="tile-fmt">{fmt.toUpperCase()}</div>
-        <div className="tile-err">失败</div>
+        <div className="tile-err" title={errMsg}>{showErr ? shortErr : '失败'}</div>
+        {!isProcessing && (
+          <button className="tile-retry" onClick={handleRetry} title="重试">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 4v4h4"/><path d="M15 12v-4h-4"/><path d="M13.5 6A6 6 0 0 0 3 5.5L1 8M2.5 10A6 6 0 0 0 13 10.5L15 8"/>
+            </svg>
+          </button>
+        )}
       </div>
     );
   }
