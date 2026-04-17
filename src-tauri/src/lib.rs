@@ -262,6 +262,30 @@ fn build_output_path(task: &CompressTask, ext: &str, fmt: &str, width: Option<u3
     }
 }
 
+// ── Alpha channel detection ───────────────────────────────────────────────
+// Lightweight check without decoding the full image.
+// PNG: IHDR chunk color type (byte 25): 4=RGBA, 6=RGBA, 3=indexed(may have tRNS)
+// WebP: check VP8L signature or ALPH chunk
+// Other formats: assume no alpha
+
+fn has_alpha_channel(bytes: &[u8], content_type: &str) -> bool {
+    match content_type {
+        "image/png" => {
+            // PNG signature (8) + IHDR length (4) + "IHDR" (4) + width (4) + height (4) + bit_depth (1) + color_type (1)
+            if bytes.len() < 26 { return false; }
+            let color_type = bytes[25];
+            // 4 = grayscale+alpha, 6 = RGBA, 3 = indexed (may have tRNS chunk)
+            color_type == 4 || color_type == 6 || color_type == 3
+        }
+        "image/webp" => {
+            // Look for "ALPH" chunk or VP8L (lossless always supports alpha)
+            bytes.windows(4).any(|w| w == b"ALPH" || w == b"VP8L")
+        }
+        "image/avif" | "image/jxl" => true, // assume may have alpha
+        _ => false,
+    }
+}
+
 // ── Core task ──────────────────────────────────────────────────────────────
 
 async fn compress_task(
@@ -285,8 +309,27 @@ async fn compress_task(
         .first_or_octet_stream()
         .to_string();
 
-    for fmt in &task.formats {
+    // Detect alpha channel: PNG/WebP/AVIF may have transparency
+    // JPEG does not support alpha — skip conversion and emit error immediately
+    let has_alpha = has_alpha_channel(&image_bytes, &content_type);
+
+    // Partition formats: skip jpeg/jpg if image has alpha
+    let (skipped, formats_to_process): (Vec<_>, Vec<_>) = task.formats.iter()
+        .partition(|fmt| has_alpha && (fmt.as_str() == "jpeg" || fmt.as_str() == "jpg"));
+
+    for fmt in &skipped {
+        emit_fmt(&app, &task.id, &make_result(
+            fmt, "error",
+            Some("原图含透明通道，不支持转换为 JPEG".to_string())
+        ));
+    }
+
+    for fmt in &formats_to_process {
         emit_fmt(&app, &task.id, &make_result(fmt, "uploading", None));
+    }
+
+    if formats_to_process.is_empty() {
+        return;
     }
 
     let store = match with_retry(retry_count, || {
@@ -297,14 +340,14 @@ async fn compress_task(
     }).await {
         Ok(s) => s,
         Err(e) => {
-            for fmt in &task.formats {
+            for fmt in &formats_to_process {
                 emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e.clone())));
             }
             return;
         }
     };
 
-    for (i, fmt) in task.formats.iter().enumerate() {
+    for (i, fmt) in formats_to_process.iter().enumerate() {
         if i > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         }
