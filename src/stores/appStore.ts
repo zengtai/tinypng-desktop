@@ -22,6 +22,8 @@ interface AppStore {
   applyGlobalFormats: () => void;
   toggleFileFmt: (id: string, fmt: string) => void;
   clearFmtResult: (id: string, fmt: string) => void;
+  notification: string | null;
+  setNotification: (msg: string | null) => void;
 }
 
 const defaultSettings: AppSettings = {
@@ -39,6 +41,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   settings: defaultSettings,
   isProcessing: false,
   activeTab: 'compress',
+  notification: null,
 
   addFiles: (newFiles) =>
     set((state) => {
@@ -92,6 +95,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return { ...f, results };
       }),
     })),
+
+  setNotification: (msg) => {
+    set({ notification: msg });
+    if (msg) setTimeout(() => set({ notification: null }), 4000);
+  },
 
   toggleFileFmt: (id, fmt) =>
     set((state) => ({

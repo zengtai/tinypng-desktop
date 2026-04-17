@@ -48,7 +48,7 @@ export default function DropZone({ onDrop, onPick }: Props) {
         </div>
         <p className="dropzone-title">拖拽图片到这里</p>
         <p className="dropzone-sub">或者 <span className="link">点击选择文件</span></p>
-        <p className="dropzone-hint">支持 PNG · JPEG · WebP · AVIF · 无数量限制</p>
+        <p className="dropzone-hint">支持 PNG · JPEG · WebP · AVIF · 单张最大 5MB · 无数量限制</p>
       </div>
     </div>
   );

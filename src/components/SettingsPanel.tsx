@@ -1,28 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../stores/appStore';
-import { tauriApi, pickDirectory, persistSettings, loadPersistedSettings, clearPersistedSettings } from '../utils/tauri';
+import { tauriApi, pickDirectory, persistSettings, clearPersistedSettings } from '../utils/tauri';
 import { AppSettings } from '../types';
 
 export default function SettingsPanel() {
   const { settings, setSettings } = useAppStore();
   const [local, setLocal] = useState<AppSettings>(settings);
   const [saved, setSaved] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-
-  // Load persisted settings on first mount
-  useEffect(() => {
-    if (loaded) return;
-    loadPersistedSettings().then(persisted => {
-      if (Object.keys(persisted).length > 0) {
-        const merged = { ...settings, ...persisted };
-        setLocal(merged);
-        setSettings(merged);
-        // Sync to Rust backend too
-        tauriApi.saveSettings(merged).catch(console.error);
-      }
-      setLoaded(true);
-    });
-  }, []);
 
   useEffect(() => { setLocal(settings); }, [settings]);
 
@@ -64,7 +48,12 @@ export default function SettingsPanel() {
     <div className="settings-panel">
       <div className="s-header">
         <h2>设置</h2>
-        <span className="s-version-num">v0.1.0</span>
+        <div className="s-header-right">
+          <span className="s-version-num">v0.1.0</span>
+          <a href="https://zengtai.net/" target="_blank" rel="noopener noreferrer" className="s-author-link" title="zengtai.net">
+            <img src={new URL('../assets/logo.png', import.meta.url).href} alt="" width="16" height="16" />
+          </a>
+        </div>
       </div>
       <div className="s-grid">
       <section className="s-section">

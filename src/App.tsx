@@ -1,6 +1,6 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { useAppStore } from './stores/appStore';
-import { tauriApi, listenFmtResults, listenAllDone, pickImages } from './utils/tauri';
+import { tauriApi, listenFmtResults, listenAllDone, pickImages, loadPersistedSettings } from './utils/tauri';
 import { CompressTask, FileItem } from './types';
 import { v4 as uuidv4 } from './utils/uuid';
 import DropZone from './components/DropZone';
@@ -13,7 +13,7 @@ import './App.css';
 export default function App() {
   const {
     files, settings, isProcessing, activeTab,
-    addFiles, setProcessing, updateFmtResult, setSettings, setActiveTab,
+    addFiles, setProcessing, updateFmtResult, setSettings, setActiveTab, setNotification,
   } = useAppStore();
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -32,7 +32,6 @@ export default function App() {
   useEffect(() => {
     // Load from Rust state first, then merge persisted settings from disk
     tauriApi.getSettings().then(async (rustSettings) => {
-      const { loadPersistedSettings } = await import('./utils/tauri');
       const persisted = await loadPersistedSettings();
       const merged = { ...rustSettings, ...persisted };
       setSettings(merged);
@@ -69,22 +68,30 @@ export default function App() {
 
   const handleDropFiles = useCallback(async (paths: string[]) => {
     const { stat } = await import('@tauri-apps/plugin-fs');
-    const items: FileItem[] = await Promise.all(
-      paths.map(async (p) => {
-        let size = 0;
-        try { const info = await stat(p); size = info.size ?? 0; } catch {}
-        const name = p.replace(/\\/g, '/').split('/').pop() ?? p;
-        return {
-          id: uuidv4(),
-          file_path: p,
-          file_name: name,
-          file_size: size,
-          formats: new Set(useAppStore.getState().globalFormats),
-          results: {},
-        };
-      })
-    );
-    addFiles(items);
+    const MAX_SIZE = 5 * 1024 * 1024; // 5MB TinyPNG limit
+    const items: FileItem[] = [];
+    const skipped: string[] = [];
+    for (const p of paths) {
+      let size = 0;
+      try { const info = await stat(p); size = info.size ?? 0; } catch {}
+      const name = p.replace(/\\/g, '/').split('/').pop() ?? p;
+      if (size > MAX_SIZE) {
+        skipped.push(name);
+        continue;
+      }
+      items.push({
+        id: uuidv4(),
+        file_path: p,
+        file_name: name,
+        file_size: size,
+        formats: new Set(useAppStore.getState().globalFormats),
+        results: {},
+      });
+    }
+    if (items.length > 0) addFiles(items);
+    if (skipped.length > 0) {
+      setNotification(`跳过 ${skipped.length} 个超过 5MB 的文件：${skipped.join('、')}`);
+    }
   }, []);
 
   const handlePickFiles = useCallback(async () => {
@@ -101,17 +108,23 @@ export default function App() {
 
     setProcessing(true);
 
-    const tasks: CompressTask[] = pending.map(f => ({
-      id: f.id,
-      file_path: f.file_path,
-      file_name: f.file_name,
-      file_size: f.file_size,
-      formats: [...f.formats],
-      output_dir: settings.output_dir ?? undefined,
-      suffix: settings.output_suffix,
-      overwrite: settings.overwrite_original,
-      fmt_folder: settings.fmt_folder,
-    }));
+    const tasks: CompressTask[] = pending.map(f => {
+      // Only send formats that need processing (not already done)
+      const pendingFmts = [...f.formats].filter(
+        fmt => !f.results[fmt] || f.results[fmt].status === 'error'
+      );
+      return {
+        id: f.id,
+        file_path: f.file_path,
+        file_name: f.file_name,
+        file_size: f.file_size,
+        formats: pendingFmts,
+        output_dir: settings.output_dir ?? undefined,
+        suffix: settings.output_suffix,
+        overwrite: settings.overwrite_original,
+        fmt_folder: settings.fmt_folder,
+      };
+    }).filter(t => t.formats.length > 0);
 
     try {
       await tauriApi.compressImages(tasks);

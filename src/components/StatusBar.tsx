@@ -3,7 +3,7 @@ import { useAppStore } from '../stores/appStore';
 import { formatBytes } from '../utils/format';
 
 export default function StatusBar() {
-  const { files, isProcessing } = useAppStore();
+  const { files, isProcessing, notification } = useAppStore();
   if (!files.length) return (
     <footer className="status-bar">
       <span className="status-hint">TinyPNG Desktop — 自动批量队列，无数量限制</span>
@@ -25,17 +25,23 @@ export default function StatusBar() {
 
   return (
     <footer className="status-bar">
-      <div className="sb-l">
-        {isProcessing
-          ? <span className="status-active">处理中 {done}/{total}</span>
-          : <span>{total} 张</span>}
-        {batches > 1 && <span className="batch-tag">将分 {batches} 批</span>}
-        {errors > 0 && <span className="status-error">{errors} 失败</span>}
-      </div>
-      {done > 0 && (
-        <div className="sb-r">
-          <span className="status-saved">节省 {formatBytes(savedBytes)} ({done}/{total} 完成)</span>
-        </div>
+      {notification ? (
+        <div className="sb-notify">{notification}</div>
+      ) : (
+        <>
+          <div className="sb-l">
+            {isProcessing
+              ? <span className="status-active">处理中 {done}/{total}</span>
+              : <span>{total} 张</span>}
+            {batches > 1 && <span className="batch-tag">将分 {batches} 批</span>}
+            {errors > 0 && <span className="status-error">{errors} 失败</span>}
+          </div>
+          {done > 0 && (
+            <div className="sb-r">
+              <span className="status-saved">节省 {formatBytes(savedBytes)} ({done}/{total} 完成)</span>
+            </div>
+          )}
+        </>
       )}
     </footer>
   );
