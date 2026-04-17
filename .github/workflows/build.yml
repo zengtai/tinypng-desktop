@@ -39,32 +39,13 @@ jobs:
         run: npm run build
 
       - name: Build Tauri app
-        run: npm run tauri build
+        run: npm run tauri build -- --no-bundle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package portable zip
-        shell: powershell
-        run: |
-          $exe = Get-ChildItem -Recurse "src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
-          if ($exe) {
-            Write-Host "Found installer: $($exe.FullName)"
-            $installDir = "portable-extract"
-            Start-Process $exe.FullName -ArgumentList "/S /D=$((Resolve-Path .).Path)\$installDir" -Wait
-            if (Test-Path $installDir) {
-              Compress-Archive -Path "$installDir\*" -DestinationPath "TinyPNG-Desktop-portable.zip"
-              Write-Host "Portable zip created"
-            } else {
-              Copy-Item $exe.FullName "TinyPNG-Desktop-setup.exe"
-            }
-          }
-
-      - name: Upload portable
+      - name: Upload executable
         uses: actions/upload-artifact@v4.6.2
-        if: always()
         with:
-          name: windows-portable
-          path: |
-            TinyPNG-Desktop-portable.zip
-            TinyPNG-Desktop-setup.exe
-          if-no-files-found: warn
+          name: TinyPNG-Desktop-windows
+          path: src-tauri/target/release/tinypng-desktop.exe
+          if-no-files-found: error

@@ -391,7 +391,7 @@ async fn compress_task(
         } else { 0.0 };
 
         emit_fmt(&app, &task.id, &FmtResult {
-            fmt: fmt.clone(),
+            fmt: fmt.to_string(),
             status: "done".into(),
             compressed_size: Some(compressed_size),
             saved_percent: Some(saved_pct),
