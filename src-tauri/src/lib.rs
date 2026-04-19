@@ -488,6 +488,17 @@ mod commands {
     }
 
     #[tauri::command]
+    pub fn open_url(url: String) -> Result<(), String> {
+        #[cfg(target_os = "windows")]
+        std::process::Command::new("cmd").args(["/c", "start", &url]).spawn().map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        std::process::Command::new("open").arg(&url).spawn().map_err(|e| e.to_string())?;
+        #[cfg(target_os = "linux")]
+        std::process::Command::new("xdg-open").arg(&url).spawn().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    #[tauri::command]
     pub async fn open_folder(path: String) -> Result<(), String> {
         #[cfg(target_os = "macos")]
         std::process::Command::new("open")
@@ -524,6 +535,7 @@ pub fn run() {
             commands::save_settings,
             commands::compress_images,
             commands::open_folder,
+            commands::open_url,
             commands::load_settings_file,
             commands::save_settings_file,
             commands::clear_settings_file,

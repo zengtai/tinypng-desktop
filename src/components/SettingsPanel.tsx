@@ -50,9 +50,9 @@ export default function SettingsPanel() {
         <h2>设置</h2>
         <div className="s-header-right">
           <span className="s-version-num">v0.1.0</span>
-          <a href="https://zengtai.net/" target="_blank" rel="noopener noreferrer" className="s-author-link" title="zengtai.net">
+          <span className="s-author-link" title="zengtai.net" onClick={() => tauriApi.openUrl('https://zengtai.net/')}>
             <img src={new URL('../assets/logo.png', import.meta.url).href} alt="" width="16" height="16" />
-          </a>
+          </span>
         </div>
       </div>
       <div className="s-grid">
