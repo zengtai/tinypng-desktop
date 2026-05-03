@@ -39,6 +39,8 @@ pub struct AppSettings {
     pub fmt_folder: bool,
     pub max_concurrent: usize,
     pub retry_count: u32,
+    #[serde(default)]
+    pub api_key: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -50,6 +52,7 @@ impl Default for AppSettings {
             fmt_folder: false,
             max_concurrent: 3,
             retry_count: 2,
+            api_key: None,
         }
     }
 }
@@ -217,6 +220,112 @@ async fn download_image(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, 
         .map_err(|e| format!("download read failed: {e}"))
 }
 
+// ── Official API (with API key) ───────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct ShrinkOutput {
+    url: String,
+    size: u64,
+    #[serde(rename = "type")]
+    mime_type: String,
+    width: Option<u32>,
+    height: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ShrinkResponse {
+    output: ShrinkOutput,
+}
+
+fn basic_auth(api_key: &str) -> String {
+    use std::io::Write;
+    let mut buf = Vec::new();
+    write!(buf, "api:{api_key}").unwrap();
+    format!("Basic {}", base64_encode(&buf))
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::new();
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 { result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char); } else { result.push('='); }
+        if chunk.len() > 2 { result.push(CHARS[(triple & 0x3F) as usize] as char); } else { result.push('='); }
+    }
+    result
+}
+
+async fn shrink_official(
+    client: &reqwest::Client,
+    image_bytes: Vec<u8>,
+    content_type: &str,
+    api_key: &str,
+) -> Result<ShrinkResponse, String> {
+    let resp = client
+        .post("https://api.tinify.com/shrink")
+        .header("Authorization", basic_auth(api_key))
+        .header("Content-Type", content_type)
+        .body(image_bytes)
+        .send().await
+        .map_err(|e| format!("shrink request failed: {e}"))?;
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!("shrink {status}: {}", &body[..body.len().min(200)]));
+    }
+    serde_json::from_str(&body).map_err(|e| format!("shrink parse error: {e}"))
+}
+
+async fn convert_official(
+    client: &reqwest::Client,
+    output_url: &str,
+    target_mime: &str,
+    api_key: &str,
+) -> Result<(Vec<u8>, String), String> {
+    // POST to output URL with convert options → returns image bytes
+    let body = serde_json::json!({ "convert": { "type": target_mime } });
+    let resp = client
+        .post(output_url)
+        .header("Authorization", basic_auth(api_key))
+        .json(&body)
+        .send().await
+        .map_err(|e| format!("convert request failed: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("convert {status}: {}", &text[..text.len().min(200)]));
+    }
+    let actual_type = resp.headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or(target_mime)
+        .to_string();
+    let bytes = resp.bytes().await.map(|b| b.to_vec())
+        .map_err(|e| format!("convert read failed: {e}"))?;
+    Ok((bytes, actual_type))
+}
+
+async fn download_official(
+    client: &reqwest::Client,
+    url: &str,
+    api_key: &str,
+) -> Result<Vec<u8>, String> {
+    let resp = client.get(url)
+        .header("Authorization", basic_auth(api_key))
+        .send().await
+        .map_err(|e| format!("download failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("download status: {}", resp.status()));
+    }
+    resp.bytes().await.map(|b| b.to_vec())
+        .map_err(|e| format!("download read failed: {e}"))
+}
+
 fn emit_fmt(app: &AppHandle, task_id: &str, result: &FmtResult) {
     let _ = app.emit("fmt-result", serde_json::json!({
         "task_id": task_id,
@@ -288,11 +397,17 @@ fn has_alpha_channel(bytes: &[u8], content_type: &str) -> bool {
 
 // ── Core task ──────────────────────────────────────────────────────────────
 
+enum UploadResult {
+    Free { key: String, size: u64 },
+    Official { output_url: String, output_type: String, width: Option<u32>, height: Option<u32> },
+}
+
 async fn compress_task(
     app: AppHandle,
     task: CompressTask,
     client: Arc<reqwest::Client>,
     retry_count: u32,
+    api_key: Option<String>,
 ) {
     let image_bytes = match tokio::fs::read(&task.file_path).await {
         Ok(b) => b,
@@ -332,13 +447,39 @@ async fn compress_task(
         return;
     }
 
-    let store = match with_retry(retry_count, || {
-        let client = client.clone();
-        let bytes = image_bytes.clone();
-        let ct = content_type.clone();
-        async move { store_image(&client, bytes, &ct).await }
-    }).await {
-        Ok(s) => s,
+    // ── Upload phase ──
+    // Official API: shrink once, get output URL
+    // Free API: store once, get key
+    let upload_result: Result<UploadResult, String> = if let Some(ref key) = api_key {
+        with_retry(retry_count, || {
+            let client = client.clone();
+            let bytes = image_bytes.clone();
+            let ct = content_type.clone();
+            let key = key.clone();
+            async move {
+                let resp = shrink_official(&client, bytes, &ct, &key).await?;
+                Ok(UploadResult::Official {
+                    output_url: resp.output.url,
+                    output_type: resp.output.mime_type,
+                    width: resp.output.width,
+                    height: resp.output.height,
+                })
+            }
+        }).await
+    } else {
+        with_retry(retry_count, || {
+            let client = client.clone();
+            let bytes = image_bytes.clone();
+            let ct = content_type.clone();
+            async move {
+                let resp = store_image(&client, bytes, &ct).await?;
+                Ok(UploadResult::Free { key: resp.key, size: resp.size })
+            }
+        }).await
+    };
+
+    let upload = match upload_result {
+        Ok(u) => u,
         Err(e) => {
             for fmt in &formats_to_process {
                 emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e.clone())));
@@ -347,31 +488,61 @@ async fn compress_task(
         }
     };
 
+    // ── Process each format ──
     for (i, fmt) in formats_to_process.iter().enumerate() {
         if i > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         }
         emit_fmt(&app, &task.id, &make_result(fmt, "processing", None));
 
-        let proc = match with_retry(retry_count, || {
-            let client = client.clone();
-            let key = store.key.clone();
-            let ct = content_type.clone();
-            let size = store.size;
-            let fmt = fmt.clone();
-            async move { process_image(&client, &key, &ct, size, &fmt).await }
-        }).await {
-            Ok(p) => p,
-            Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+        let target_mime = fmt_to_mime(fmt);
+
+        // Get compressed bytes + actual mime type + dimensions
+        let (bytes, actual_mime, width, height) = match &upload {
+            UploadResult::Official { output_url, output_type, width, height } => {
+                let key = api_key.as_ref().unwrap();
+                if target_mime == output_type.as_str() {
+                    // Same format: just download the compressed version
+                    match download_official(&client, output_url, key).await {
+                        Ok(b) => (b, output_type.clone(), *width, *height),
+                        Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+                    }
+                } else {
+                    // Different format: convert
+                    match with_retry(retry_count, || {
+                        let client = client.clone();
+                        let url = output_url.clone();
+                        let key = key.clone();
+                        let mime = target_mime.to_string();
+                        async move { convert_official(&client, &url, &mime, &key).await }
+                    }).await {
+                        Ok((b, actual)) => (b, actual, *width, *height),
+                        Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+                    }
+                }
+            }
+            UploadResult::Free { key, size } => {
+                let proc = match with_retry(retry_count, || {
+                    let client = client.clone();
+                    let k = key.clone();
+                    let ct = content_type.clone();
+                    let s = *size;
+                    let f = fmt.clone();
+                    async move { process_image(&client, &k, &ct, s, &f).await }
+                }).await {
+                    Ok(p) => p,
+                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+                };
+
+                match download_image(&client, &proc.url).await {
+                    Ok(b) => (b, proc.mime_type, proc.width, proc.height),
+                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+                }
+            }
         };
 
-        let bytes = match download_image(&client, &proc.url).await {
-            Ok(b) => b,
-            Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
-        };
-
-        let ext = mime_to_ext(&proc.mime_type);
-        let out_path = build_output_path(&task, ext, fmt, proc.width, proc.height);
+        let ext = mime_to_ext(&actual_mime);
+        let out_path = build_output_path(&task, ext, fmt, width, height);
 
         // Safety: prevent silent overwrite when user hasn't opted in
         if !task.overwrite {
@@ -454,6 +625,7 @@ mod commands {
         let max_concurrent = settings.max_concurrent.clamp(1, 5);
         let client = Arc::new(build_client()?);
         let retry = settings.retry_count;
+        let api_key = settings.api_key.clone().filter(|k| !k.is_empty());
 
         let batches: Vec<Vec<CompressTask>> = tasks.chunks(20).map(|c| c.to_vec()).collect();
 
@@ -463,7 +635,8 @@ mod commands {
                     .map(|task| {
                         let app = app.clone();
                         let client = client.clone();
-                        async move { compress_task(app, task, client, retry).await }
+                        let api_key = api_key.clone();
+                        async move { compress_task(app, task, client, retry, api_key).await }
                     })
                     .buffer_unordered(max_concurrent)
                     .collect::<Vec<_>>()

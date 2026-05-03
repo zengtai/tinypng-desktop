@@ -39,4 +39,5 @@ export interface AppSettings {
   fmt_folder: boolean;
   max_concurrent: number;
   retry_count: number;
+  api_key?: string | null;
 }

@@ -29,6 +29,7 @@ export default function SettingsPanel() {
     fmt_folder: false,
     max_concurrent: 3,
     retry_count: 2,
+    api_key: null,
   };
 
   const handlePickDir = async () => {
@@ -52,7 +53,7 @@ export default function SettingsPanel() {
         <div className="s-header-right">
           <span className="s-version-num" onDoubleClick={() => setShowAuthor(v => !v)} style={{cursor:'default',userSelect:'none'}}>v0.1.0</span>
           {showAuthor && (
-            <span className="s-author-link" title="zengtai.net" onClick={() => tauriApi.openUrl('https://zengtai.net/')}>
+            <span className="s-author-link" data-tip="zengtai.net" onClick={() => tauriApi.openUrl('https://zengtai.net/')}>
               <img src={new URL('../assets/logo.png', import.meta.url).href} alt="" width="16" height="16" />
             </span>
           )}
@@ -145,6 +146,24 @@ export default function SettingsPanel() {
       </section>
 
       </div>
+
+      <section className="s-section s-section-full">
+        <h3>API</h3>
+        <div className="s-row">
+          <span className="s-label">API Key</span>
+          <div className="s-ctrl">
+            <input className="s-input" style={{width:'100%',fontFamily:'"DM Mono",monospace',fontSize:11}}
+              type="password"
+              value={local.api_key || ''}
+              onChange={e => set('api_key', e.target.value || null)}
+              placeholder="留空则使用免费接口" />
+          </div>
+        </div>
+        <div className="s-hint" style={{padding:'2px 0 0'}}>
+          填写后使用 <a style={{color:'var(--accent)',cursor:'pointer'}} onClick={() => tauriApi.openUrl('https://tinypng.com/developers')}>TinyPNG 官方 API</a>（每月 500 张免费额度，无单次数量限制）
+        </div>
+      </section>
+
       <div className="s-footer">
         <button className="btn btn-primary" onClick={handleSave}>保存设置</button>
         <button className="btn btn-ghost" onClick={handleReset}>恢复默认</button>
