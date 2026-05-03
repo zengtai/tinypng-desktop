@@ -373,6 +373,22 @@ async fn compress_task(
         let ext = mime_to_ext(&proc.mime_type);
         let out_path = build_output_path(&task, ext, fmt, proc.width, proc.height);
 
+        // Safety: prevent silent overwrite when user hasn't opted in
+        if !task.overwrite {
+            let input_canon = std::fs::canonicalize(&task.file_path).unwrap_or_else(|_| PathBuf::from(&task.file_path));
+            let out_canon = out_path.parent()
+                .and_then(|p| std::fs::canonicalize(p).ok())
+                .map(|p| p.join(out_path.file_name().unwrap_or_default()))
+                .unwrap_or_else(|| out_path.clone());
+            if input_canon == out_canon {
+                emit_fmt(&app, &task.id, &make_result(
+                    fmt, "error",
+                    Some("输出路径与原文件相同，请设置文件名后缀或开启覆盖模式".to_string())
+                ));
+                continue;
+            }
+        }
+
         if let Some(parent) = out_path.parent() {
             if let Err(e) = tokio::fs::create_dir_all(parent).await {
                 emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(format!("创建目录失败: {e}"))));
