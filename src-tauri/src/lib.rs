@@ -221,20 +221,20 @@ async fn download_image(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, 
 }
 
 // ── Official API (with API key) ───────────────────────────────────────────
+// Docs: https://tinify.com/developers/reference/http
+// shrink: POST binary → 201, Location header has output URL
+// convert: POST to output URL with JSON → returns image bytes + headers
+// download: GET output URL → returns image bytes + headers
 
-#[derive(Debug, Deserialize)]
-struct ShrinkOutput {
-    url: String,
-    size: u64,
-    #[serde(rename = "type")]
-    mime_type: String,
-    width: Option<u32>,
-    height: Option<u32>,
+struct ShrinkResult {
+    output_url: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct ShrinkResponse {
-    output: ShrinkOutput,
+struct OfficialDownload {
+    bytes: Vec<u8>,
+    content_type: String,
+    width: Option<u32>,
+    height: Option<u32>,
 }
 
 fn basic_auth(api_key: &str) -> String {
@@ -260,12 +260,16 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
+fn parse_header_u32(resp: &reqwest::Response, name: &str) -> Option<u32> {
+    resp.headers().get(name)?.to_str().ok()?.parse().ok()
+}
+
 async fn shrink_official(
     client: &reqwest::Client,
     image_bytes: Vec<u8>,
     content_type: &str,
     api_key: &str,
-) -> Result<ShrinkResponse, String> {
+) -> Result<ShrinkResult, String> {
     let resp = client
         .post("https://api.tinify.com/shrink")
         .header("Authorization", basic_auth(api_key))
@@ -274,11 +278,17 @@ async fn shrink_official(
         .send().await
         .map_err(|e| format!("shrink request failed: {e}"))?;
     let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
     if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
         return Err(format!("shrink {status}: {}", &body[..body.len().min(200)]));
     }
-    serde_json::from_str(&body).map_err(|e| format!("shrink parse error: {e}"))
+    // Output URL is in the Location header
+    let output_url = resp.headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "shrink response missing Location header".to_string())?;
+    Ok(ShrinkResult { output_url })
 }
 
 async fn convert_official(
@@ -286,8 +296,7 @@ async fn convert_official(
     output_url: &str,
     target_mime: &str,
     api_key: &str,
-) -> Result<(Vec<u8>, String), String> {
-    // POST to output URL with convert options → returns image bytes
+) -> Result<OfficialDownload, String> {
     let body = serde_json::json!({ "convert": { "type": target_mime } });
     let resp = client
         .post(output_url)
@@ -300,30 +309,16 @@ async fn convert_official(
         let text = resp.text().await.unwrap_or_default();
         return Err(format!("convert {status}: {}", &text[..text.len().min(200)]));
     }
-    let actual_type = resp.headers()
+    let content_type = resp.headers()
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or(target_mime)
         .to_string();
+    let width = parse_header_u32(&resp, "image-width");
+    let height = parse_header_u32(&resp, "image-height");
     let bytes = resp.bytes().await.map(|b| b.to_vec())
         .map_err(|e| format!("convert read failed: {e}"))?;
-    Ok((bytes, actual_type))
-}
-
-async fn download_official(
-    client: &reqwest::Client,
-    url: &str,
-    api_key: &str,
-) -> Result<Vec<u8>, String> {
-    let resp = client.get(url)
-        .header("Authorization", basic_auth(api_key))
-        .send().await
-        .map_err(|e| format!("download failed: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("download status: {}", resp.status()));
-    }
-    resp.bytes().await.map(|b| b.to_vec())
-        .map_err(|e| format!("download read failed: {e}"))
+    Ok(OfficialDownload { bytes, content_type, width, height })
 }
 
 fn emit_fmt(app: &AppHandle, task_id: &str, result: &FmtResult) {
@@ -399,7 +394,7 @@ fn has_alpha_channel(bytes: &[u8], content_type: &str) -> bool {
 
 enum UploadResult {
     Free { key: String, size: u64 },
-    Official { output_url: String, output_type: String, width: Option<u32>, height: Option<u32> },
+    Official { output_url: String },
 }
 
 async fn compress_task(
@@ -459,10 +454,7 @@ async fn compress_task(
             async move {
                 let resp = shrink_official(&client, bytes, &ct, &key).await?;
                 Ok(UploadResult::Official {
-                    output_url: resp.output.url,
-                    output_type: resp.output.mime_type,
-                    width: resp.output.width,
-                    height: resp.output.height,
+                    output_url: resp.output_url,
                 })
             }
         }).await
@@ -499,26 +491,18 @@ async fn compress_task(
 
         // Get compressed bytes + actual mime type + dimensions
         let (bytes, actual_mime, width, height) = match &upload {
-            UploadResult::Official { output_url, output_type, width, height } => {
+            UploadResult::Official { output_url } => {
                 let key = api_key.as_ref().unwrap();
-                if target_mime == output_type.as_str() {
-                    // Same format: just download the compressed version
-                    match download_official(&client, output_url, key).await {
-                        Ok(b) => (b, output_type.clone(), *width, *height),
-                        Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
-                    }
-                } else {
-                    // Different format: convert
-                    match with_retry(retry_count, || {
-                        let client = client.clone();
-                        let url = output_url.clone();
-                        let key = key.clone();
-                        let mime = target_mime.to_string();
-                        async move { convert_official(&client, &url, &mime, &key).await }
-                    }).await {
-                        Ok((b, actual)) => (b, actual, *width, *height),
-                        Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
-                    }
+                // Always use convert to get the target format explicitly
+                match with_retry(retry_count, || {
+                    let client = client.clone();
+                    let url = output_url.clone();
+                    let key = key.clone();
+                    let mime = target_mime.to_string();
+                    async move { convert_official(&client, &url, &mime, &key).await }
+                }).await {
+                    Ok(dl) => (dl.bytes, dl.content_type, dl.width, dl.height),
+                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
                 }
             }
             UploadResult::Free { key, size } => {
