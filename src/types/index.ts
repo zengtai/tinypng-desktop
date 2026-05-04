@@ -40,4 +40,5 @@ export interface AppSettings {
   max_concurrent: number;
   retry_count: number;
   api_key?: string | null;
+  bg_color?: string;
 }

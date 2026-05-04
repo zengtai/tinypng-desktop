@@ -153,6 +153,10 @@ tinypng-desktop/
 - 请勿设置过高并发或短时间处理大量图片，以免 IP 被限速
 - 图片会上传至 TinyPNG 服务器处理，敏感图片请勿使用
 
+## 更新日志
+
+详见 [CHANGELOG.md](CHANGELOG.md)
+
 ## License
 
 MIT

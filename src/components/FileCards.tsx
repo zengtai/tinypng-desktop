@@ -45,11 +45,13 @@ function FmtTile({ f, fmt }: { f: FileItem; fmt: string }) {
   if (status === 'error') {
     const errMsg = r?.error || '未知错误';
     const shortErr = errMsg.length > 20 ? errMsg.slice(0, 20) + '…' : errMsg;
+    // Permanent errors that retrying won't fix
+    const permanent = errMsg.includes('透明通道') || errMsg.includes('输出路径与原文件');
     return (
       <div className="fmt-tile error-tile" onClick={handleClick} style={{cursor:'pointer'}}>
         <div className="tile-fmt">{fmt.toUpperCase()}</div>
-        <div className="tile-err" title={errMsg}>{showErr ? shortErr : '失败'}</div>
-        {!isProcessing && (
+        <div className="tile-err" title={errMsg}>{showErr || permanent ? shortErr : '失败'}</div>
+        {!isProcessing && !permanent && (
           <button className="tile-retry" onClick={handleRetry} title="重试">
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M1 4v4h4"/><path d="M15 12v-4h-4"/><path d="M13.5 6A6 6 0 0 0 3 5.5L1 8M2.5 10A6 6 0 0 0 13 10.5L15 8"/>

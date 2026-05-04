@@ -41,7 +41,11 @@ pub struct AppSettings {
     pub retry_count: u32,
     #[serde(default)]
     pub api_key: Option<String>,
+    #[serde(default = "default_bg_color")]
+    pub bg_color: String,
 }
+
+fn default_bg_color() -> String { "#ffffff".to_string() }
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -53,6 +57,7 @@ impl Default for AppSettings {
             max_concurrent: 3,
             retry_count: 2,
             api_key: None,
+            bg_color: "#ffffff".to_string(),
         }
     }
 }
@@ -228,6 +233,7 @@ async fn download_image(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, 
 
 struct ShrinkResult {
     output_url: String,
+    compression_count: Option<u32>,
 }
 
 struct OfficialDownload {
@@ -288,7 +294,8 @@ async fn shrink_official(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string())
         .ok_or_else(|| "shrink response missing Location header".to_string())?;
-    Ok(ShrinkResult { output_url })
+    let compression_count = parse_header_u32(&resp, "compression-count");
+    Ok(ShrinkResult { output_url, compression_count })
 }
 
 async fn convert_official(
@@ -296,8 +303,15 @@ async fn convert_official(
     output_url: &str,
     target_mime: &str,
     api_key: &str,
+    bg_color: Option<&str>,
 ) -> Result<OfficialDownload, String> {
-    let body = serde_json::json!({ "convert": { "type": target_mime } });
+    let mut body = serde_json::json!({ "convert": { "type": target_mime } });
+    if let Some(color) = bg_color {
+        body.as_object_mut().unwrap().insert(
+            "transform".to_string(),
+            serde_json::json!({ "background": color })
+        );
+    }
     let resp = client
         .post(output_url)
         .header("Authorization", basic_auth(api_key))
@@ -336,6 +350,26 @@ fn make_result(fmt: &str, status: &str, err: Option<String>) -> FmtResult {
         saved_percent: None,
         output_path: None,
         error: err,
+    }
+}
+
+fn friendly_error(e: &str) -> String {
+    if e.contains("dns error") || e.contains("resolve") {
+        "网络连接失败，请检查网络".to_string()
+    } else if e.contains("timed out") || e.contains("timeout") {
+        "请求超时，请稍后重试".to_string()
+    } else if e.contains("connection refused") || e.contains("connect") {
+        "无法连接服务器，请检查网络".to_string()
+    } else if e.contains("429") || e.contains("Too Many") {
+        "请求过于频繁，请稍后重试".to_string()
+    } else if e.contains("401") || e.contains("Unauthorized") {
+        "API Key 无效，请检查设置".to_string()
+    } else if e.contains("413") || e.contains("too large") {
+        "文件过大，请使用 5MB 以内的图片".to_string()
+    } else if e.contains("415") || e.contains("Unsupported") {
+        "不支持的图片格式".to_string()
+    } else {
+        e.to_string()
     }
 }
 
@@ -394,7 +428,7 @@ fn has_alpha_channel(bytes: &[u8], content_type: &str) -> bool {
 
 enum UploadResult {
     Free { key: String, size: u64 },
-    Official { output_url: String },
+    Official { output_url: String, compression_count: Option<u32> },
 }
 
 async fn compress_task(
@@ -403,6 +437,7 @@ async fn compress_task(
     client: Arc<reqwest::Client>,
     retry_count: u32,
     api_key: Option<String>,
+    bg_color: String,
 ) {
     let image_bytes = match tokio::fs::read(&task.file_path).await {
         Ok(b) => b,
@@ -420,17 +455,24 @@ async fn compress_task(
         .to_string();
 
     // Detect alpha channel: PNG/WebP/AVIF may have transparency
-    // JPEG does not support alpha — skip conversion and emit error immediately
     let has_alpha = has_alpha_channel(&image_bytes, &content_type);
+    let use_api = api_key.is_some();
 
-    // Partition formats: skip jpeg/jpg if image has alpha
+    // Partition formats: handle JPEG differently based on API mode
     let (skipped, formats_to_process): (Vec<_>, Vec<_>) = task.formats.iter()
-        .partition(|fmt| has_alpha && (fmt.as_str() == "jpeg" || fmt.as_str() == "jpg"));
+        .partition(|fmt| {
+            if !has_alpha { return false; }
+            let is_jpeg = fmt.as_str() == "jpeg" || fmt.as_str() == "jpg";
+            if !is_jpeg { return false; }
+            // API mode with bg_color: allow JPEG (will use transform.background)
+            // Free mode: skip JPEG
+            !use_api
+        });
 
     for fmt in &skipped {
         emit_fmt(&app, &task.id, &make_result(
             fmt, "error",
-            Some("原图含透明通道，不支持转换为 JPEG".to_string())
+            Some("原图含透明通道，免费接口不支持转换为 JPEG。设置 API Key 后可自动填充背景色转换".to_string())
         ));
     }
 
@@ -455,6 +497,7 @@ async fn compress_task(
                 let resp = shrink_official(&client, bytes, &ct, &key).await?;
                 Ok(UploadResult::Official {
                     output_url: resp.output_url,
+                    compression_count: resp.compression_count,
                 })
             }
         }).await
@@ -474,7 +517,7 @@ async fn compress_task(
         Ok(u) => u,
         Err(e) => {
             for fmt in &formats_to_process {
-                emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e.clone())));
+                emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(friendly_error(&e))));
             }
             return;
         }
@@ -491,18 +534,27 @@ async fn compress_task(
 
         // Get compressed bytes + actual mime type + dimensions
         let (bytes, actual_mime, width, height) = match &upload {
-            UploadResult::Official { output_url } => {
+            UploadResult::Official { output_url, compression_count } => {
+                // Emit compression count on first format
+                if i == 0 {
+                    if let Some(count) = compression_count {
+                        let _ = app.emit("compression-count", count);
+                    }
+                }
                 let key = api_key.as_ref().unwrap();
-                // Always use convert to get the target format explicitly
+                // Pass bg_color for JPEG conversion of transparent images
+                let need_bg = has_alpha && (fmt.as_str() == "jpeg" || fmt.as_str() == "jpg");
+                let bg = if need_bg { Some(bg_color.as_str()) } else { None };
                 match with_retry(retry_count, || {
                     let client = client.clone();
                     let url = output_url.clone();
                     let key = key.clone();
                     let mime = target_mime.to_string();
-                    async move { convert_official(&client, &url, &mime, &key).await }
+                    let bg = bg.map(|s| s.to_string());
+                    async move { convert_official(&client, &url, &mime, &key, bg.as_deref()).await }
                 }).await {
                     Ok(dl) => (dl.bytes, dl.content_type, dl.width, dl.height),
-                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(friendly_error(&e)))); continue; }
                 }
             }
             UploadResult::Free { key, size } => {
@@ -515,12 +567,12 @@ async fn compress_task(
                     async move { process_image(&client, &k, &ct, s, &f).await }
                 }).await {
                     Ok(p) => p,
-                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(friendly_error(&e)))); continue; }
                 };
 
                 match download_image(&client, &proc.url).await {
                     Ok(b) => (b, proc.mime_type, proc.width, proc.height),
-                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(e))); continue; }
+                    Err(e) => { emit_fmt(&app, &task.id, &make_result(fmt, "error", Some(friendly_error(&e)))); continue; }
                 }
             }
         };
@@ -610,6 +662,7 @@ mod commands {
         let client = Arc::new(build_client()?);
         let retry = settings.retry_count;
         let api_key = settings.api_key.clone().filter(|k| !k.is_empty());
+        let bg_color = settings.bg_color.clone();
 
         let batches: Vec<Vec<CompressTask>> = tasks.chunks(20).map(|c| c.to_vec()).collect();
 
@@ -620,7 +673,8 @@ mod commands {
                         let app = app.clone();
                         let client = client.clone();
                         let api_key = api_key.clone();
-                        async move { compress_task(app, task, client, retry, api_key).await }
+                        let bg_color = bg_color.clone();
+                        async move { compress_task(app, task, client, retry, api_key, bg_color).await }
                     })
                     .buffer_unordered(max_concurrent)
                     .collect::<Vec<_>>()

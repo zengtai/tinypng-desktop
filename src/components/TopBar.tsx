@@ -7,11 +7,12 @@ interface Props {
 }
 
 export default function TopBar({ onAdd, onCompress }: Props) {
-  const { files, globalFormats, isProcessing, clearFiles, clearDone, setGlobalFormats, applyGlobalFormats } = useAppStore();
+  const { files, globalFormats, isProcessing, clearFiles, clearDone, setGlobalFormats, applyGlobalFormats, clearAllErrors } = useAppStore();
 
   const allFmtsDone = (f: any) => [...f.formats].every((fmt: string) => f.results[fmt]?.status === 'done');
   const done = files.filter(allFmtsDone).length;
   const pending = files.filter(f => !allFmtsDone(f)).length;
+  const hasErrors = files.some(f => [...f.formats].some((fmt: string) => f.results[fmt]?.status === 'error'));
 
   const toggleFmt = (fmt: string) => {
     const next = new Set(globalFormats);
@@ -52,6 +53,9 @@ export default function TopBar({ onAdd, onCompress }: Props) {
         <span className="tally">{files.length} 张 · <b>{done}</b> 完成</span>
         {done > 0 && !isProcessing && (
           <button className="btn btn-ghost btn-sm" onClick={clearDone}>清除已完成</button>
+        )}
+        {hasErrors && !isProcessing && (
+          <button className="btn btn-ghost btn-sm" onClick={clearAllErrors}>重试失败</button>
         )}
         {!isProcessing && (
           <button className="btn btn-danger btn-sm" onClick={clearFiles}>清除全部</button>

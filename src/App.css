@@ -141,6 +141,7 @@ html,body,#root{height:100%;font-family:'DM Sans',-apple-system,sans-serif;font-
 .status-active{color:var(--yellow);font-weight:500}
 .status-error{color:var(--red)}
 .sb-notify{font-size:11px;color:var(--yellow);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.api-count{font-size:11px;color:var(--text3);margin-left:10px}
 .status-saved{color:var(--green);font-weight:600;font-family:'DM Mono',monospace}
 .batch-tag{padding:1px 7px;border-radius:10px;background:rgba(77,159,255,.12);color:var(--blue);font-size:10px;font-weight:600}
 

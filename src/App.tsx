@@ -13,7 +13,7 @@ import './App.css';
 export default function App() {
   const {
     files, settings, isProcessing, activeTab,
-    addFiles, setProcessing, updateFmtResult, setSettings, setActiveTab, setNotification,
+    addFiles, setProcessing, updateFmtResult, setSettings, setActiveTab, setNotification, setCompressionCount,
   } = useAppStore();
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -47,9 +47,16 @@ export default function App() {
       updateFmtResult(payload.task_id, payload.result.fmt, payload.result);
     });
     const unsub2 = listenAllDone(() => setProcessing(false));
+    let unsubCount: (() => void) | null = null;
+    import('@tauri-apps/api/event').then(({ listen: listenEvent }) => {
+      listenEvent('compression-count', (e: any) => {
+        setCompressionCount(e.payload as number);
+      }).then(fn => { unsubCount = fn; });
+    });
     return () => {
       unsub1.then(fn => fn());
       unsub2.then(fn => fn());
+      if (unsubCount) unsubCount();
     };
   }, []);
 
@@ -60,7 +67,13 @@ export default function App() {
       listen('tauri://drag-drop', (event: any) => {
         const paths: string[] = event.payload?.paths ?? [];
         const images = paths.filter(p => /\.(png|jpe?g|webp|avif)$/i.test(p));
+        const nonImages = paths.length - images.length;
         if (images.length > 0) handleDropFiles(images);
+        if (nonImages > 0) {
+          useAppStore.getState().setNotification(
+            `已跳过 ${nonImages} 个不支持的文件（仅支持 PNG/JPEG/WebP/AVIF）`
+          );
+        }
       }).then(fn => { unlisten = fn; });
     });
     return () => { if (unlisten) unlisten(); };

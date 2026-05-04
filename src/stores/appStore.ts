@@ -22,8 +22,11 @@ interface AppStore {
   applyGlobalFormats: () => void;
   toggleFileFmt: (id: string, fmt: string) => void;
   clearFmtResult: (id: string, fmt: string) => void;
+  clearAllErrors: () => void;
   notification: string | null;
   setNotification: (msg: string | null) => void;
+  compressionCount: number | null;
+  setCompressionCount: (n: number | null) => void;
 }
 
 const defaultSettings: AppSettings = {
@@ -33,6 +36,7 @@ const defaultSettings: AppSettings = {
   fmt_folder: false,
   max_concurrent: 3,
   retry_count: 2,
+  bg_color: '#ffffff',
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -42,6 +46,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   isProcessing: false,
   activeTab: 'compress',
   notification: null,
+  compressionCount: null,
 
   addFiles: (newFiles) =>
     set((state) => {
@@ -100,6 +105,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ notification: msg });
     if (msg) setTimeout(() => set({ notification: null }), 4000);
   },
+
+  setCompressionCount: (n) => set({ compressionCount: n }),
+
+  clearAllErrors: () =>
+    set((state) => ({
+      files: state.files.map(f => {
+        const results = { ...f.results };
+        for (const fmt of Object.keys(results)) {
+          if (results[fmt]?.status === 'error') delete results[fmt];
+        }
+        return { ...f, results };
+      }),
+    })),
 
   toggleFileFmt: (id, fmt) =>
     set((state) => ({

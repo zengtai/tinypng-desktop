@@ -3,7 +3,7 @@ import { useAppStore } from '../stores/appStore';
 import { formatBytes } from '../utils/format';
 
 export default function StatusBar() {
-  const { files, isProcessing, notification } = useAppStore();
+  const { files, isProcessing, notification, compressionCount } = useAppStore();
   if (!files.length) return (
     <footer className="status-bar">
       <span className="status-hint">TinyPNG Desktop — 自动批量队列，无数量限制</span>
@@ -36,9 +36,19 @@ export default function StatusBar() {
             {batches > 1 && <span className="batch-tag">将分 {batches} 批</span>}
             {errors > 0 && <span className="status-error">{errors} 失败</span>}
           </div>
-          {done > 0 && (
+          {(done > 0 || compressionCount !== null) && (
             <div className="sb-r">
-              <span className="status-saved">节省 {formatBytes(savedBytes)} ({done}/{total} 完成)</span>
+              {done > 0 && (
+                <span className="status-saved">
+                  {savedBytes >= 0
+                    ? `节省 ${formatBytes(savedBytes)}`
+                    : `增加 ${formatBytes(Math.abs(savedBytes))}`
+                  } ({done}/{total} 完成)
+                </span>
+              )}
+              {compressionCount !== null && (
+                <span className="api-count">API: {compressionCount}/500</span>
+              )}
             </div>
           )}
         </>

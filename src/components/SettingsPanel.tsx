@@ -30,6 +30,7 @@ export default function SettingsPanel() {
     max_concurrent: 3,
     retry_count: 2,
     api_key: null,
+    bg_color: '#ffffff',
   };
 
   const handlePickDir = async () => {
@@ -162,6 +163,20 @@ export default function SettingsPanel() {
         <div className="s-hint" style={{padding:'2px 0 0'}}>
           填写后使用 <a style={{color:'var(--accent)',cursor:'pointer'}} onClick={() => tauriApi.openUrl('https://tinypng.com/developers')}>TinyPNG 官方 API</a>（每月 500 张免费额度，无单次数量限制）
         </div>
+        {local.api_key && (
+          <div className="s-row" style={{marginTop:6}}>
+            <span className="s-label">透明背景色</span>
+            <div className="s-ctrl">
+              <input type="color" value={local.bg_color || '#ffffff'}
+                onChange={e => set('bg_color', e.target.value)}
+                style={{width:28,height:22,padding:0,border:'1px solid var(--border2)',borderRadius:4,cursor:'pointer'}} />
+              <input className="s-input" value={local.bg_color || '#ffffff'}
+                onChange={e => set('bg_color', e.target.value)}
+                style={{width:80,fontFamily:'"DM Mono",monospace',fontSize:11}} />
+              <span className="s-hint">透明图转 JPEG 时填充的背景色</span>
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="s-footer">
