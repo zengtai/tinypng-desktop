@@ -207,7 +207,7 @@ export function t(key: string, params?: Record<string, string | number>): string
   let msg = messages[currentLocale]?.[key] ?? messages.zh[key] ?? key;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      msg = msg.replaceAll(`{${k}}`, String(v));
+      msg = msg.split(`{${k}}`).join(String(v));
     }
   }
   return msg;
