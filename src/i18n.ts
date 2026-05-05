@@ -82,6 +82,12 @@ const messages: Record<Locale, Record<string, string>> = {
     'set.bgColor': '透明背景色',
     'set.bgHint': '透明图转 JPEG 时填充的背景色',
 
+    // Settings - Font
+    'set.font': '界面',
+    'set.fontFamily': '界面字体',
+    'set.fontPlaceholder': '留空使用系统默认字体',
+    'set.fontHint': '输入字体名称，如 Microsoft YaHei、Inter',
+
     // Settings - Footer
     'set.save': '保存设置',
     'set.restoreDefault': '恢复默认',
@@ -173,6 +179,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'set.apiQuota': ' (500 free/month, no per-batch limit)',
     'set.bgColor': 'Background color',
     'set.bgHint': 'Fill color for transparent images converted to JPEG',
+
+    'set.font': 'Interface',
+    'set.fontFamily': 'Font',
+    'set.fontPlaceholder': 'Leave empty for system default',
+    'set.fontHint': 'Enter font name, e.g. Inter, Arial',
 
     'set.save': 'Save',
     'set.restoreDefault': 'Restore defaults',

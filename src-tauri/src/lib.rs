@@ -45,6 +45,8 @@ pub struct AppSettings {
     pub bg_color: String,
     #[serde(default = "default_locale")]
     pub locale: String,
+    #[serde(default)]
+    pub font_family: String,
 }
 
 fn default_bg_color() -> String { "#ffffff".to_string() }
@@ -62,6 +64,7 @@ impl Default for AppSettings {
             api_key: None,
             bg_color: "#ffffff".to_string(),
             locale: "zh".to_string(),
+            font_family: String::new(),
         }
     }
 }

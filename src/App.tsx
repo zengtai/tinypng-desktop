@@ -29,6 +29,15 @@ export default function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    const ff = settings.font_family;
+    if (ff) {
+      document.documentElement.style.setProperty('--font-main', `"${ff}",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif`);
+    } else {
+      document.documentElement.style.setProperty('--font-main', `-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif`);
+    }
+  }, [settings.font_family]);
+
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
   const [showAuthor, setShowAuthor] = useState(false);
   const [, forceUpdate] = useState(0);
@@ -51,6 +60,9 @@ export default function App() {
       const merged = { ...rustSettings, ...persisted };
       setSettings(merged);
       if (merged.locale) { setLocale(merged.locale as Locale); forceUpdate(n => n + 1); }
+      if (merged.font_family) {
+        document.documentElement.style.setProperty('--font-main', `"${merged.font_family}",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif`);
+      }
       if (Object.keys(persisted).length > 0) {
         tauriApi.saveSettings(merged).catch(console.error);
       }

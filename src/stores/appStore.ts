@@ -38,6 +38,7 @@ const defaultSettings: AppSettings = {
   retry_count: 2,
   bg_color: '#ffffff',
   locale: 'zh',
+  font_family: '',
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({

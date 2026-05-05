@@ -42,4 +42,5 @@ export interface AppSettings {
   api_key?: string | null;
   bg_color?: string;
   locale?: string;
+  font_family?: string;
 }

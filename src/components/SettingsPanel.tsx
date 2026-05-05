@@ -32,6 +32,7 @@ export default function SettingsPanel() {
     api_key: null,
     bg_color: '#ffffff',
     locale: 'zh',
+    font_family: '',
   };
 
   const handlePickDir = async () => {
@@ -139,11 +140,27 @@ export default function SettingsPanel() {
       </div>
 
       <section className="s-section s-section-full">
+        <h3>{t('set.font')}</h3>
+        <div className="s-row">
+          <span className="s-label">{t('set.fontFamily')}</span>
+          <div className="s-ctrl">
+            <input className="s-input" style={{width:'100%',fontSize:12}}
+              value={local.font_family || ''}
+              onChange={e => set('font_family', e.target.value)}
+              placeholder={t('set.fontPlaceholder')} />
+          </div>
+        </div>
+        <div className="s-hint" style={{padding:'2px 0 0'}}>
+          {t('set.fontHint')}
+        </div>
+      </section>
+
+      <section className="s-section s-section-full">
         <h3>{t('set.api')}</h3>
         <div className="s-row">
           <span className="s-label">{t('set.apiKey')}</span>
           <div className="s-ctrl">
-            <input className="s-input" style={{width:'100%',fontFamily:'"DM Mono",monospace',fontSize:11}}
+            <input className="s-input" style={{width:'100%',fontFamily:'var(--font-mono)',fontSize:11}}
               type="password"
               value={local.api_key || ''}
               onChange={e => set('api_key', e.target.value || null)}
@@ -166,7 +183,7 @@ export default function SettingsPanel() {
                 style={{width:28,height:22,padding:0,border:'1px solid var(--border2)',borderRadius:4,cursor:'pointer'}} />
               <input className="s-input" value={local.bg_color || '#ffffff'}
                 onChange={e => set('bg_color', e.target.value)}
-                style={{width:80,fontFamily:'"DM Mono",monospace',fontSize:11}} />
+                style={{width:80,fontFamily:'var(--font-mono)',fontSize:11}} />
               <span className="s-hint">{t('set.bgHint')}</span>
             </div>
           </div>
