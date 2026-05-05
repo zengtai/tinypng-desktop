@@ -717,7 +717,33 @@ mod commands {
     #[tauri::command]
     pub fn open_url(url: String) -> Result<(), String> {
         #[cfg(target_os = "windows")]
-        std::process::Command::new("cmd").args(["/c", "start", &url]).spawn().map_err(|e| e.to_string())?;
+        {
+            use std::ffi::OsStr;
+            use std::os::windows::ffi::OsStrExt;
+            use std::iter::once;
+            extern "system" {
+                fn ShellExecuteW(
+                    hwnd: *mut std::ffi::c_void,
+                    operation: *const u16,
+                    file: *const u16,
+                    parameters: *const u16,
+                    directory: *const u16,
+                    show_cmd: i32,
+                ) -> *mut std::ffi::c_void;
+            }
+            let operation: Vec<u16> = OsStr::new("open").encode_wide().chain(once(0)).collect();
+            let file: Vec<u16> = OsStr::new(&url).encode_wide().chain(once(0)).collect();
+            unsafe {
+                ShellExecuteW(
+                    std::ptr::null_mut(),
+                    operation.as_ptr(),
+                    file.as_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    1, // SW_SHOWNORMAL
+                );
+            }
+        }
         #[cfg(target_os = "macos")]
         std::process::Command::new("open").arg(&url).spawn().map_err(|e| e.to_string())?;
         #[cfg(target_os = "linux")]

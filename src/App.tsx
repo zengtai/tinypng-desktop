@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { useAppStore } from './stores/appStore';
 import { tauriApi, listenFmtResults, listenAllDone, pickImages, loadPersistedSettings } from './utils/tauri';
+import logoSvg from './assets/logo.svg';
 import { CompressTask, FileItem } from './types';
 import { v4 as uuidv4 } from './utils/uuid';
 import DropZone from './components/DropZone';
@@ -162,11 +163,8 @@ export default function App() {
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <span className="s-version-num" onDoubleClick={() => setShowAuthor(v => !v)} style={{cursor:'default',userSelect:'none'}}>v0.1.1</span>
           {showAuthor && (
-            <span className="s-author-link" onClick={() => tauriApi.openUrl('https://zengtai.net/')}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="16" height="16" rx="3" fill="currentColor" fillOpacity="0.15"/>
-                <text x="8" y="11.5" textAnchor="middle" fontSize="10" fontWeight="600" fontFamily="'DM Sans',sans-serif" fill="currentColor">Z</text>
-              </svg>
+            <span className="s-author-link" onClick={() => tauriApi.openUrl('https://github.com/zengtai/tinypng-desktop')}>
+              <img src={logoSvg} alt="" width="16" height="16" />
             </span>
           )}
           <button className="theme-btn" onClick={toggleTheme} title={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}>

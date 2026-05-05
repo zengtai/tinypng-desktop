@@ -8,6 +8,9 @@
 - **版本号移到顶部** — 版本号从设置页移到 header 行右侧，与导航标签、主题切换同行
 - **设置页精简** — 移除设置页 `<h2>设置</h2>` 标题区域，腾出空间避免最小窗口纵向滚动
 - **去掉 author tooltip** — 作者 logo 不再显示 hover 提示，避免撑开宽度产生横向滚动条
+- **图标改用 SVG** — author logo 改用 `logo.svg`，删除 `logo.png`
+- **链接改为仓库地址** — 双击版本号显示的 logo 链接改为 GitHub 仓库
+- **打开链接无闪烁** — Windows 下用 `ShellExecuteW` 替代 `cmd /c start`，不再闪命令提示符窗口
 
 ### Added
 - **API Key 清除按钮** — API Key 输入框右侧新增 × 按钮，快速清空 Key
