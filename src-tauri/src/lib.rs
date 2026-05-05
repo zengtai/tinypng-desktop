@@ -43,9 +43,12 @@ pub struct AppSettings {
     pub api_key: Option<String>,
     #[serde(default = "default_bg_color")]
     pub bg_color: String,
+    #[serde(default = "default_locale")]
+    pub locale: String,
 }
 
 fn default_bg_color() -> String { "#ffffff".to_string() }
+fn default_locale() -> String { "zh".to_string() }
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -58,6 +61,7 @@ impl Default for AppSettings {
             retry_count: 2,
             api_key: None,
             bg_color: "#ffffff".to_string(),
+            locale: "zh".to_string(),
         }
     }
 }
@@ -355,19 +359,19 @@ fn make_result(fmt: &str, status: &str, err: Option<String>) -> FmtResult {
 
 fn friendly_error(e: &str) -> String {
     if e.contains("dns error") || e.contains("resolve") {
-        "网络连接失败，请检查网络".to_string()
+        "err_dns".to_string()
     } else if e.contains("timed out") || e.contains("timeout") {
-        "请求超时，请稍后重试".to_string()
+        "err_timeout".to_string()
     } else if e.contains("connection refused") || e.contains("connect") {
-        "无法连接服务器，请检查网络".to_string()
+        "err_connect".to_string()
     } else if e.contains("429") || e.contains("Too Many") {
-        "请求过于频繁，请稍后重试".to_string()
+        "err_429".to_string()
     } else if e.contains("401") || e.contains("Unauthorized") {
-        "API Key 无效，请检查设置".to_string()
+        "err_401".to_string()
     } else if e.contains("413") || e.contains("too large") {
-        "文件过大，请使用 5MB 以内的图片".to_string()
+        "err_413".to_string()
     } else if e.contains("415") || e.contains("Unsupported") {
-        "不支持的图片格式".to_string()
+        "err_415".to_string()
     } else {
         e.to_string()
     }
@@ -472,7 +476,7 @@ async fn compress_task(
     for fmt in &skipped {
         emit_fmt(&app, &task.id, &make_result(
             fmt, "error",
-            Some("原图含透明通道，免费接口不支持转换为 JPEG。设置 API Key 后可自动填充背景色转换".to_string())
+            Some("err_alpha_free".to_string())
         ));
     }
 
@@ -590,7 +594,7 @@ async fn compress_task(
             if input_canon == out_canon {
                 emit_fmt(&app, &task.id, &make_result(
                     fmt, "error",
-                    Some("输出路径与原文件相同，请设置文件名后缀或开启覆盖模式".to_string())
+                    Some("err_same_path".to_string())
                 ));
                 continue;
             }

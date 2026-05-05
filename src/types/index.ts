@@ -41,4 +41,5 @@ export interface AppSettings {
   retry_count: number;
   api_key?: string | null;
   bg_color?: string;
+  locale?: string;
 }

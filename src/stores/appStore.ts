@@ -37,6 +37,7 @@ const defaultSettings: AppSettings = {
   max_concurrent: 3,
   retry_count: 2,
   bg_color: '#ffffff',
+  locale: 'zh',
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({

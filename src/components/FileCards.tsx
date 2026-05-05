@@ -3,6 +3,7 @@ import { useAppStore, ALL_FMTS } from '../stores/appStore';
 import { formatBytes } from '../utils/format';
 import { tauriApi } from '../utils/tauri';
 import { FileItem } from '../types';
+import { t } from '../i18n';
 
 interface Props { onDrop: (paths: string[]) => void; }
 
@@ -32,7 +33,7 @@ function FmtTile({ f, fmt }: { f: FileItem; fmt: string }) {
   }
   if (status === 'done') {
     return (
-      <div className="fmt-tile done" onClick={handleClick} title="点击在文件夹中显示">
+      <div className="fmt-tile done" onClick={handleClick} title={t('card.showInFolder')}>
         <div className="tile-check">
           <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
@@ -43,16 +44,18 @@ function FmtTile({ f, fmt }: { f: FileItem; fmt: string }) {
     );
   }
   if (status === 'error') {
-    const errMsg = r?.error || '未知错误';
-    const shortErr = errMsg.length > 20 ? errMsg.slice(0, 20) + '…' : errMsg;
+    const errMsg = r?.error || '';
+    // Translate error codes from Rust
+    const displayErr = t(errMsg) !== errMsg ? t(errMsg) : errMsg;
+    const shortErr = displayErr.length > 20 ? displayErr.slice(0, 20) + '…' : displayErr;
     // Permanent errors that retrying won't fix
-    const permanent = errMsg.includes('透明通道') || errMsg.includes('输出路径与原文件');
+    const permanent = errMsg === 'err_alpha_free' || errMsg === 'err_same_path';
     return (
       <div className="fmt-tile error-tile" onClick={handleClick} style={{cursor:'pointer'}}>
         <div className="tile-fmt">{fmt.toUpperCase()}</div>
-        <div className="tile-err" title={errMsg}>{showErr || permanent ? shortErr : '失败'}</div>
+        <div className="tile-err" title={displayErr}>{showErr || permanent ? shortErr : t('card.failed')}</div>
         {!isProcessing && !permanent && (
-          <button className="tile-retry" onClick={handleRetry} title="重试">
+          <button className="tile-retry" onClick={handleRetry} title={t('card.retry')}>
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M1 4v4h4"/><path d="M15 12v-4h-4"/><path d="M13.5 6A6 6 0 0 0 3 5.5L1 8M2.5 10A6 6 0 0 0 13 10.5L15 8"/>
             </svg>
@@ -64,7 +67,7 @@ function FmtTile({ f, fmt }: { f: FileItem; fmt: string }) {
   return (
     <div className="fmt-tile">
       <div className="tile-fmt">{fmt.toUpperCase()}</div>
-      <div className="tile-pending">待处理</div>
+      <div className="tile-pending">{t('card.tilePending')}</div>
     </div>
   );
 }
@@ -81,9 +84,9 @@ function FileCard({ f }: { f: FileItem }) {
   const color = colors[ext] || '#7b8299';
 
   let statusBadge = null;
-  if (anyBusy) statusBadge = <span className="badge bd-busy"><span className="spin" /> 处理中</span>;
-  else if (allDone) statusBadge = <span className="badge bd-done">✓ 完成</span>;
-  else if (!anyDone) statusBadge = <span className="badge bd-pending">待处理</span>;
+  if (anyBusy) statusBadge = <span className="badge bd-busy"><span className="spin" /> {t('card.processing')}</span>;
+  else if (allDone) statusBadge = <span className="badge bd-done">✓ {t('card.done')}</span>;
+  else if (!anyDone) statusBadge = <span className="badge bd-pending">{t('card.pending')}</span>;
 
   return (
     <div className={`file-card${allDone ? ' st-done' : anyBusy ? ' st-busy' : ''}`}>
@@ -143,7 +146,7 @@ export default function FileCards({ onDrop }: Props) {
       <div className="file-cards">
         {files.map(f => <FileCard key={f.id} f={f} />)}
       </div>
-      {dragOver && <div className="drag-overlay">松开以添加图片</div>}
+      {dragOver && <div className="drag-overlay">{t('drag.overlay')}</div>}
     </div>
   );
 }

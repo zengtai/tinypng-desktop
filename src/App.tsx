@@ -4,6 +4,7 @@ import { tauriApi, listenFmtResults, listenAllDone, pickImages, loadPersistedSet
 import logoSvg from './assets/logo.svg';
 import { CompressTask, FileItem } from './types';
 import { v4 as uuidv4 } from './utils/uuid';
+import { t, setLocale, getLocale, Locale } from './i18n';
 import DropZone from './components/DropZone';
 import FileCards from './components/FileCards';
 import TopBar from './components/TopBar';
@@ -30,6 +31,18 @@ export default function App() {
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
   const [showAuthor, setShowAuthor] = useState(false);
+  const [, forceUpdate] = useState(0);
+
+  const toggleLocale = () => {
+    const next: Locale = getLocale() === 'zh' ? 'en' : 'zh';
+    setLocale(next);
+    const s = useAppStore.getState().settings;
+    const updated = { ...s, locale: next };
+    setSettings(updated);
+    tauriApi.saveSettings(updated).catch(console.error);
+    import('./utils/tauri').then(m => m.persistSettings(updated)).catch(console.error);
+    forceUpdate(n => n + 1);
+  };
 
   useEffect(() => {
     // Load from Rust state first, then merge persisted settings from disk
@@ -37,6 +50,7 @@ export default function App() {
       const persisted = await loadPersistedSettings();
       const merged = { ...rustSettings, ...persisted };
       setSettings(merged);
+      if (merged.locale) { setLocale(merged.locale as Locale); forceUpdate(n => n + 1); }
       if (Object.keys(persisted).length > 0) {
         tauriApi.saveSettings(merged).catch(console.error);
       }
@@ -73,7 +87,7 @@ export default function App() {
         if (images.length > 0) handleDropFiles(images);
         if (nonImages > 0) {
           useAppStore.getState().setNotification(
-            `已跳过 ${nonImages} 个不支持的文件（仅支持 PNG/JPEG/WebP/AVIF）`
+            t('notify.skippedNonImage', { n: nonImages })
           );
         }
       }).then(fn => { unlisten = fn; });
@@ -105,7 +119,7 @@ export default function App() {
     }
     if (items.length > 0) addFiles(items);
     if (skipped.length > 0) {
-      setNotification(`跳过 ${skipped.length} 个超过 5MB 的文件：${skipped.join('、')}`);
+      setNotification(t('notify.skippedLarge', { n: skipped.length, names: skipped.join('、') }));
     }
   }, []);
 
@@ -156,8 +170,8 @@ export default function App() {
       <header className="app-header">
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <nav className="tab-nav">
-            <button className={activeTab === 'compress' ? 'active' : ''} onClick={() => setActiveTab('compress')}>压缩</button>
-            <button className={activeTab === 'settings' ? 'active' : ''} onClick={() => setActiveTab('settings')}>设置</button>
+            <button className={activeTab === 'compress' ? 'active' : ''} onClick={() => setActiveTab('compress')}>{t('tab.compress')}</button>
+            <button className={activeTab === 'settings' ? 'active' : ''} onClick={() => setActiveTab('settings')}>{t('tab.settings')}</button>
           </nav>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -167,7 +181,10 @@ export default function App() {
               <img src={logoSvg} alt="" width="16" height="16" />
             </span>
           )}
-          <button className="theme-btn" onClick={toggleTheme} title={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}>
+          <button className="lang-btn" onClick={toggleLocale} title={getLocale() === 'zh' ? 'English' : '中文'}>
+            {getLocale() === 'zh' ? 'EN' : '中'}
+          </button>
+          <button className="theme-btn" onClick={toggleTheme} title={theme === 'dark' ? t('theme.light') : t('theme.dark')}>
             {theme === 'dark' ? (
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
