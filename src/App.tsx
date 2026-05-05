@@ -1,6 +1,7 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { useAppStore } from './stores/appStore';
 import { tauriApi, listenFmtResults, listenAllDone, pickImages, loadPersistedSettings } from './utils/tauri';
+import logoUrl from './assets/logo.png';
 import { CompressTask, FileItem } from './types';
 import { v4 as uuidv4 } from './utils/uuid';
 import DropZone from './components/DropZone';
@@ -28,6 +29,7 @@ export default function App() {
   }, [theme]);
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+  const [showAuthor, setShowAuthor] = useState(false);
 
   useEffect(() => {
     // Load from Rust state first, then merge persisted settings from disk
@@ -157,6 +159,14 @@ export default function App() {
             <button className={activeTab === 'compress' ? 'active' : ''} onClick={() => setActiveTab('compress')}>压缩</button>
             <button className={activeTab === 'settings' ? 'active' : ''} onClick={() => setActiveTab('settings')}>设置</button>
           </nav>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span className="s-version-num" onDoubleClick={() => setShowAuthor(v => !v)} style={{cursor:'default',userSelect:'none'}}>v0.1.1</span>
+          {showAuthor && (
+            <span className="s-author-link" onClick={() => tauriApi.openUrl('https://zengtai.net/')}>
+              <img src={logoUrl} alt="" width="16" height="16" />
+            </span>
+          )}
           <button className="theme-btn" onClick={toggleTheme} title={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}>
             {theme === 'dark' ? (
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

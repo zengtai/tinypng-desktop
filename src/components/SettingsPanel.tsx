@@ -7,7 +7,6 @@ export default function SettingsPanel() {
   const { settings, setSettings } = useAppStore();
   const [local, setLocal] = useState<AppSettings>(settings);
   const [saved, setSaved] = useState(false);
-  const [showAuthor, setShowAuthor] = useState(false);
 
   useEffect(() => { setLocal(settings); }, [settings]);
 
@@ -49,17 +48,6 @@ export default function SettingsPanel() {
 
   return (
     <div className="settings-panel">
-      <div className="s-header">
-        <h2>设置</h2>
-        <div className="s-header-right">
-          <span className="s-version-num" onDoubleClick={() => setShowAuthor(v => !v)} style={{cursor:'default',userSelect:'none'}}>v0.1.0</span>
-          {showAuthor && (
-            <span className="s-author-link" data-tip="zengtai.net" onClick={() => tauriApi.openUrl('https://zengtai.net/')}>
-              <img src={new URL('../assets/logo.png', import.meta.url).href} alt="" width="16" height="16" />
-            </span>
-          )}
-        </div>
-      </div>
       <div className="s-grid">
       <section className="s-section">
         <h3>输出</h3>
@@ -158,6 +146,10 @@ export default function SettingsPanel() {
               value={local.api_key || ''}
               onChange={e => set('api_key', e.target.value || null)}
               placeholder="留空则使用免费接口" />
+            {local.api_key && (
+              <button className="btn btn-ghost btn-sm" onClick={() => set('api_key', null)} title="清除 API Key"
+                style={{padding:'2px 6px',fontSize:14,lineHeight:1,color:'var(--text3)'}}>×</button>
+            )}
           </div>
         </div>
         <div className="s-hint" style={{padding:'2px 0 0'}}>
