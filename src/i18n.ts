@@ -14,7 +14,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'drop.title': '拖拽图片到这里',
     'drop.or': '或者 ',
     'drop.pick': '点击选择文件',
-    'drop.hint': '支持 PNG · JPEG · WebP · AVIF · 单张最大 5MB · 无数量限制',
+    'drop.hint': '支持 PNG · JPEG · WebP · AVIF · 单张最大 5MB',
 
     // TopBar
     'top.add': '添加图片',
@@ -38,7 +38,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'drag.overlay': '松开以添加图片',
 
     // StatusBar
-    'status.hint': 'TinyPNG Desktop — 自动批量队列，无数量限制',
+    'status.hint': 'TinyPNG Desktop — 自动分批队列，请合理使用',
     'status.processing': '处理中 {done}/{total}',
     'status.count': '{n} 张',
     'status.batches': '将分 {n} 批',
@@ -69,7 +69,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'set.concurrentHint': '张同时上传',
     'set.retry': '失败重试',
     'set.retryUnit': '{n} 次',
-    'set.batchInfo': 'TinyPNG 每次限制 20 张。本工具自动分批，支持任意数量图片。',
+    'set.batchInfo': 'TinyPNG 每次限制 20 张。本工具自动分批处理，请合理使用，避免频繁请求导致 IP 被限速。',
 
     // Settings - API
     'set.api': 'API',
@@ -86,7 +86,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'set.font': '界面',
     'set.fontFamily': '界面字体',
     'set.fontPlaceholder': '留空使用系统默认字体',
-    'set.fontHint': '输入字体名称，如 Microsoft YaHei、Inter',
+    'set.fontHint': '输入字体名称，带空格的名称需加引号，如 "Microsoft YaHei"',
 
     // Settings - Footer
     'set.save': '保存设置',
@@ -118,7 +118,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'drop.title': 'Drop images here',
     'drop.or': 'or ',
     'drop.pick': 'click to select files',
-    'drop.hint': 'PNG · JPEG · WebP · AVIF · Max 5MB each · No quantity limit',
+    'drop.hint': 'PNG · JPEG · WebP · AVIF · Max 5MB each',
 
     'top.add': 'Add images',
     'top.format': 'Format: ',
@@ -139,7 +139,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'card.tilePending': 'Pending',
     'drag.overlay': 'Drop to add images',
 
-    'status.hint': 'TinyPNG Desktop — Auto batch queue, no limits',
+    'status.hint': 'TinyPNG Desktop — Auto batch queue, please use responsibly',
     'status.processing': 'Processing {done}/{total}',
     'status.count': '{n} files',
     'status.batches': '{n} batches',
@@ -168,7 +168,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'set.concurrentHint': 'simultaneous uploads',
     'set.retry': 'Retry on failure',
     'set.retryUnit': '{n} times',
-    'set.batchInfo': 'TinyPNG limits 20 images per request. This tool auto-batches with no limit.',
+    'set.batchInfo': 'TinyPNG limits 20 images per request. This tool auto-batches, but please use responsibly to avoid rate limiting.',
 
     'set.api': 'API',
     'set.apiKey': 'API Key',
@@ -183,7 +183,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'set.font': 'Interface',
     'set.fontFamily': 'Font',
     'set.fontPlaceholder': 'Leave empty for system default',
-    'set.fontHint': 'Enter font name, e.g. Inter, Arial',
+    'set.fontHint': 'Enter font name. Names with spaces need quotes, e.g. "Segoe UI"',
 
     'set.save': 'Save',
     'set.restoreDefault': 'Restore defaults',

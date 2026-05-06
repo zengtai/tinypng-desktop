@@ -1,6 +1,6 @@
 # TinyPNG Desktop
 
-基于 Tauri 2 + React + Rust 的桌面图片压缩工具。通过模拟浏览器请求访问 TinyPNG 免费接口，实现无限制批量压缩和格式转换。
+基于 Tauri 2 + React + Rust 的桌面图片压缩工具。支持通过 TinyPNG 免费接口或官方 API Key 进行批量压缩和格式转换。
 
 单文件 Portable 应用，无需安装，无系统残留。
 
@@ -13,7 +13,7 @@
 - 透明通道检测：原图含透明时自动跳过 JPEG（TinyPNG 不支持此转换），并给出明确提示
 
 **队列控制**
-- 无数量限制，自动分批（每批 ≤20 张，批间间隔 600ms）
+- 自动分批（每批 ≤20 张，批间间隔 600ms）
 - 批内并发数可配置（1-5，默认 3）
 - 失败自动重试（0-3 次，间隔递增）
 - 失败后可查看错误原因，手动点击重试按钮重跑单个格式
@@ -38,7 +38,7 @@
 | 桌面框架 | Tauri 2 |
 | 后端 | Rust（reqwest / tokio / futures） |
 | 构建 | GitHub Actions（windows-latest） |
-| 字体 | DM Sans + DM Mono（本地 woff2，离线可用） |
+| 多语言 | 中文 / English，运行时切换 |
 
 ## 使用
 
@@ -78,7 +78,8 @@ tinypng-desktop/
 ├── src/                          # React 前端
 │   ├── App.tsx                   # 主组件：主题切换 / 拖放监听 / 压缩调度
 │   ├── App.css                   # 全局样式 + 主题变量
-│   ├── assets/fonts/             # 本地字体文件（woff2）
+│   ├── i18n.ts                   # 多语言支持（中文 / English）
+│   ├── assets/                   # 静态资源
 │   ├── components/
 │   │   ├── DropZone.tsx          # 初始拖拽区域
 │   │   ├── FileCards.tsx         # 文件卡片列表 + 格式 tile（含重试）
@@ -106,9 +107,9 @@ tinypng-desktop/
 
 ## 核心原理
 
-### TinyPNG 接口
+### TinyPNG 免费接口
 
-通过抓包确认的真实接口，无需 API Key：
+通过抓包确认的网页端接口，无需 API Key。**注意：此接口为非官方用法，可能随 TinyPNG 网站更新而失效。**
 
 ```
 1. POST /backend/opt/store     上传原图 → { key, size }
@@ -143,12 +144,11 @@ tinypng-desktop/
 | `tauri.conf.json` 中 `plugins.dialog` 写 `{}` 报错 | 不需要配置的插件不写任何字段 |
 | `tauri-plugin-fs` 无法写 exe 目录 | 改用 Rust `std::fs` 直接读写 |
 | WebView 中 `dataTransfer.files.path` 为 undefined | 用 Tauri 原生 `tauri://drag-drop` 事件 |
-| CSS `@font-face` 绝对路径加载失败 | 用 `./assets/fonts/` 相对路径 |
 | sccache 在 Windows MSVC 下更慢 | 不要用，Swatinem/rust-cache 即可 |
 
 ## 注意事项
 
-- 使用 TinyPNG 免费网页端接口，无需 API Key
+- **免费接口**基于 TinyPNG 网页端逆向，可能随网站更新而失效，不保证长期可用。建议有稳定需求的用户使用官方 API Key（每月 500 张免费额度）
 - **单张图片最大 5MB**（TinyPNG 接口限制），超过的文件会在添加时自动跳过并在状态栏提示
 - 请勿设置过高并发或短时间处理大量图片，以免 IP 被限速
 - 图片会上传至 TinyPNG 服务器处理，敏感图片请勿使用
