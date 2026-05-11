@@ -15,7 +15,7 @@ import './App.css';
 export default function App() {
   const {
     files, settings, isProcessing, activeTab,
-    addFiles, setProcessing, updateFmtResult, setSettings, setActiveTab, setNotification, setCompressionCount,
+    addFiles, setProcessing, updateFmtResult, setSettings, setActiveTab, setNotification, setCompressionCount, setGlobalFormats,
   } = useAppStore();
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -62,6 +62,9 @@ export default function App() {
       if (merged.locale) { setLocale(merged.locale as Locale); forceUpdate(n => n + 1); }
       if (merged.font_family) {
         document.documentElement.style.setProperty('--font-main', `"${merged.font_family}",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif`);
+      }
+      if (merged.global_formats && merged.global_formats.length > 0) {
+        setGlobalFormats(new Set(merged.global_formats));
       }
       if (Object.keys(persisted).length > 0) {
         tauriApi.saveSettings(merged).catch(console.error);

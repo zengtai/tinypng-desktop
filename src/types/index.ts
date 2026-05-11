@@ -43,4 +43,5 @@ export interface AppSettings {
   bg_color?: string;
   locale?: string;
   font_family?: string;
+  global_formats?: string[];
 }

@@ -39,6 +39,7 @@ const defaultSettings: AppSettings = {
   bg_color: '#ffffff',
   locale: 'zh',
   font_family: '',
+  global_formats: ['webp', 'jpeg', 'png'],
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({

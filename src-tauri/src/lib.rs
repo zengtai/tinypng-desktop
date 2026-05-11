@@ -47,10 +47,13 @@ pub struct AppSettings {
     pub locale: String,
     #[serde(default)]
     pub font_family: String,
+    #[serde(default = "default_global_formats")]
+    pub global_formats: Vec<String>,
 }
 
 fn default_bg_color() -> String { "#ffffff".to_string() }
 fn default_locale() -> String { "zh".to_string() }
+fn default_global_formats() -> Vec<String> { vec!["webp".to_string(), "jpeg".to_string(), "png".to_string()] }
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -65,6 +68,7 @@ impl Default for AppSettings {
             bg_color: "#ffffff".to_string(),
             locale: "zh".to_string(),
             font_family: String::new(),
+            global_formats: vec!["webp".to_string(), "jpeg".to_string(), "png".to_string()],
         }
     }
 }

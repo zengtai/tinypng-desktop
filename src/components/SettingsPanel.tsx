@@ -33,6 +33,7 @@ export default function SettingsPanel() {
     bg_color: '#ffffff',
     locale: 'zh',
     font_family: '',
+    global_formats: ['webp', 'jpeg', 'png'],
   };
 
   const handlePickDir = async () => {

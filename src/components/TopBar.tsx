@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAppStore, ALL_FMTS } from '../stores/appStore';
+import { tauriApi, persistSettings } from '../utils/tauri';
 import { t } from '../i18n';
 
 interface Props {
@@ -8,7 +9,7 @@ interface Props {
 }
 
 export default function TopBar({ onAdd, onCompress }: Props) {
-  const { files, globalFormats, isProcessing, clearFiles, clearDone, setGlobalFormats, applyGlobalFormats, clearAllErrors } = useAppStore();
+  const { files, globalFormats, isProcessing, clearFiles, clearDone, setGlobalFormats, applyGlobalFormats, clearAllErrors, settings, setSettings } = useAppStore();
 
   const allFmtsDone = (f: any) => [...f.formats].every((fmt: string) => f.results[fmt]?.status === 'done');
   const done = files.filter(allFmtsDone).length;
@@ -28,6 +29,11 @@ export default function TopBar({ onAdd, onCompress }: Props) {
       else next.add(fmt);
     }
     setGlobalFormats(next);
+    // Persist format selection
+    const updated = { ...settings, global_formats: [...next] };
+    setSettings(updated);
+    tauriApi.saveSettings(updated).catch(console.error);
+    persistSettings(updated).catch(console.error);
   };
 
   return (
