@@ -1,53 +1,68 @@
+**English** | [中文](./CHANGELOG.zh-CN.md)
+
 # Changelog
 
-所有版本变更记录。格式遵循 [Keep a Changelog](https://keepachangelog.com/)。
+All notable changes to this project. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.2.0] - 2026-05-13
 
-### Changed
-- **版本号移到顶部** — 版本号从设置页移到 header 行右侧，与导航标签、主题切换同行
-- **设置页精简** — 移除设置页 `<h2>设置</h2>` 标题区域，腾出空间避免最小窗口纵向滚动
-- **去掉 author tooltip** — 作者 logo 不再显示 hover 提示，避免撑开宽度产生横向滚动条
-- **图标改用 SVG** — author logo 改用 `logo.svg`，删除 `logo.png`
-- **链接改为仓库地址** — 双击版本号显示的 logo 链接改为 GitHub 仓库
-- **打开链接无闪烁** — Windows 下用 `ShellExecuteW` 替代 `cmd /c start`，不再闪命令提示符窗口
-
 ### Added
-- **API Key 清除按钮** — API Key 输入框右侧新增 × 按钮，快速清空 Key
+
+- **i18n** — Language toggle (中/EN) in header, switches at runtime, persisted
+- **Folder drop** — Drag & drop folders, recursively scans all subdirectories for images
+- **Custom UI font** — Font input in settings, leave empty for system default
+- **API Key clear button** — × button next to API Key input for quick clearing
+- **Remember format selection** — Global format choices auto-saved and restored on next launch
+
+### Changed
+
+- **Version in header** — Moved from settings page to header bar alongside nav tabs and theme toggle
+- **Simplified settings** — Removed settings page title area to prevent scrollbars at minimum window size
+- **Removed bundled fonts** — Replaced DM Sans / DM Mono woff2 with system font stack + CSS variables
+- **SVG logo** — Switched author logo from `logo.png` to `logo.svg`
+- **Repo link** — Double-click version number now links to GitHub repository
+- **No CMD flash** — Windows uses `ShellExecuteW` instead of `cmd /c start` for opening URLs
+- **i18n error codes** — Rust returns error codes, frontend translates based on locale
+- **Responsible usage wording** — Removed "unlimited" claims, noted free API may break with website changes
+- **Larger minimum window** — 800×600 → 860×660 to prevent scrollbars on settings page
+- **Consistent spacing** — Unified footer button spacing with section gaps
 
 ## [0.1.1] - 2026-04-16
 
 ### Added
-- **透明转 JPEG 背景色** — API 模式下，透明图转 JPEG 时自动填充指定背景色（默认白色），不再直接跳过。免费模式仍提示"使用 API Key 可转换"
-- **背景色选择器** — 设置页 API 区域新增颜色选择器，填写 API Key 后显示
-- **非图片文件提示** — 拖入不支持的文件格式时，状态栏显示跳过提示
-- **API 已用次数** — 使用官方 API 时，状态栏右侧显示本月已用次数（Compression-Count/500）
-- **全部重试** — TopBar 新增"重试失败"按钮，一键清除所有失败结果重新处理
-- **CHANGELOG.md** — 独立变更日志文件
+
+- **Transparent → JPEG background** — API mode auto-fills background color (default white) for transparent images converting to JPEG
+- **Color picker** — Background color picker in settings, visible when API Key is set
+- **Non-image feedback** — Status bar notification when unsupported files are dropped
+- **API usage count** — Status bar shows monthly compression count (N/500) when using official API
+- **Retry all** — "Retry failed" button in toolbar to re-process all failed items
 
 ### Fixed
-- **NaN undefined** — 压缩后文件比原文件大时，节省体积显示 NaN。改为正确显示负值（"增加 xx"）
-- **永久性错误可重试** — 透明通道和路径冲突导致的错误不再显示重试按钮（重试无意义）
-- **官方 API 无法压缩** — shrink 响应的 output URL 在 Location 响应头（非 JSON body），convert 返回图片二进制（非 JSON），宽高在 Image-Width/Height 响应头
-- **重试已完成格式** — handleCompress 只发送未完成的格式，不再重跑已成功的
+
+- **NaN display** — Correctly shows "increased" instead of NaN when compressed file is larger than original
+- **Permanent errors** — Transparency and path conflict errors no longer show retry button
+- **Official API parsing** — Fixed output URL from Location header, binary response handling, width/height from headers
+- **Skip completed** — handleCompress only sends pending formats, no longer re-runs successful ones
 
 ### Changed
-- **网络错误友好化** — DNS/超时/连接拒绝/429/401/413 等常见错误映射为中文提示
-- **移除 tauri-plugin-shell** — 未使用，从所有配置中移除
-- **设置加载去重** — App.tsx 统一加载，移除 SettingsPanel 的独立加载逻辑
+
+- **Friendly errors** — DNS/timeout/connection/429/401/413 errors mapped to human-readable messages
+- **Removed tauri-plugin-shell** — Unused dependency removed from all configs
+- **Unified settings load** — Single load in App.tsx, removed duplicate in SettingsPanel
 
 ## [0.1.0] - 2026-04-14
 
 ### Added
-- 基于 TinyPNG 免费接口的批量图片压缩
-- 多格式同时输出（WebP / AVIF / JPEG / PNG / JXL）
-- 自动分批（≤20 张/批）+ 并发控制（1-5）+ 失败重试（0-3 次）
-- 自定义保存路径、文件名后缀（支持 {w} {h} 宽高占位符）
-- 按格式分文件夹（jpeg 统一归入 jpg/）
-- 设置持久化到 exe 同目录 settings.json
-- 明暗主题切换，默认跟随系统
-- Tauri 原生拖放
-- 透明通道检测（PNG/WebP/AVIF）
-- 压缩完成后点击 tile 定位文件
-- TinyPNG 官方 API Key 支持
-- 单文件 Portable 应用，无需安装
+
+- Batch image compression via TinyPNG free web API
+- Multi-format output (WebP / AVIF / JPEG / PNG / JXL)
+- Auto-batching (≤20/batch) + concurrency control (1–5) + auto-retry (0–3)
+- Custom output path, filename suffix (with {w} {h} placeholders)
+- Organize output by format in subfolders (jpeg → `jpg/`)
+- Settings persisted to `settings.json` next to executable
+- Light / Dark theme, follows system preference
+- Native Tauri drag & drop
+- Transparency detection (PNG / WebP / AVIF)
+- Click result tile to reveal file in explorer
+- TinyPNG official API Key support
+- Single-file portable app, no installation required
