@@ -11,7 +11,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'theme.dark': '切换暗色模式',
 
     // DropZone
-    'drop.title': '拖拽图片到这里',
+    'drop.title': '拖拽图片或文件夹到这里',
     'drop.or': '或者 ',
     'drop.pick': '点击选择文件',
     'drop.hint': '支持 PNG · JPEG · WebP · AVIF · 单张最大 5MB',
@@ -115,7 +115,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'theme.light': 'Switch to light mode',
     'theme.dark': 'Switch to dark mode',
 
-    'drop.title': 'Drop images here',
+    'drop.title': 'Drop images or folders here',
     'drop.or': 'or ',
     'drop.pick': 'click to select files',
     'drop.hint': 'PNG · JPEG · WebP · AVIF · Max 5MB each',

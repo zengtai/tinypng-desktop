@@ -9,6 +9,7 @@ export const tauriApi = {
   compressImages: (tasks: CompressTask[]) => invoke<void>('compress_images', { tasks }),
   openFolder: (path: string) => invoke<void>('open_folder', { path }),
   openUrl: (url: string) => invoke<void>('open_url', { url }),
+  resolvePaths: (paths: string[]) => invoke<string[]>('resolve_paths', { paths }),
 };
 
 // ── Persistent settings (read/write done in Rust, no fs scope issues) ──────

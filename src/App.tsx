@@ -95,10 +95,13 @@ export default function App() {
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('tauri://drag-drop', (event: any) => {
-        const paths: string[] = event.payload?.paths ?? [];
-        const images = paths.filter(p => /\.(png|jpe?g|webp|avif)$/i.test(p));
-        const nonImages = paths.length - images.length;
+      listen('tauri://drag-drop', async (event: any) => {
+        const rawPaths: string[] = event.payload?.paths ?? [];
+        if (rawPaths.length === 0) return;
+        // Resolve folders to individual image files
+        const resolved = await tauriApi.resolvePaths(rawPaths);
+        const images = resolved.filter(p => /\.(png|jpe?g|webp|avif)$/i.test(p));
+        const nonImages = resolved.length - images.length;
         if (images.length > 0) handleDropFiles(images);
         if (nonImages > 0) {
           useAppStore.getState().setNotification(

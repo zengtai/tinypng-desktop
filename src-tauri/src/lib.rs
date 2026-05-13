@@ -784,6 +784,38 @@ mod commands {
 
         Ok(())
     }
+    #[tauri::command]
+    pub fn resolve_paths(paths: Vec<String>) -> Result<Vec<String>, String> {
+        use std::path::Path;
+        let exts = ["png", "jpg", "jpeg", "webp", "avif"];
+        let mut result = Vec::new();
+        for p in &paths {
+            let path = Path::new(p);
+            if path.is_dir() {
+                collect_images(path, &exts, &mut result);
+            } else if path.is_file() {
+                result.push(p.clone());
+            }
+        }
+        Ok(result)
+    }
+}
+
+fn collect_images(dir: &std::path::Path, exts: &[&str], out: &mut Vec<String>) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_images(&path, exts, out);
+            } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if exts.iter().any(|&x| x.eq_ignore_ascii_case(ext)) {
+                    if let Some(s) = path.to_str() {
+                        out.push(s.to_string());
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ── Entry point ────────────────────────────────────────────────────────────
@@ -803,6 +835,7 @@ pub fn run() {
             commands::load_settings_file,
             commands::save_settings_file,
             commands::clear_settings_file,
+            commands::resolve_paths,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
