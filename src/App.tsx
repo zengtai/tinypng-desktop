@@ -193,7 +193,7 @@ export default function App() {
           </nav>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <span className="s-version-num" onDoubleClick={() => setShowAuthor(v => !v)} style={{cursor:'default',userSelect:'none'}}>v0.1.1</span>
+          <span className="s-version-num" onDoubleClick={() => setShowAuthor(v => !v)} style={{cursor:'default',userSelect:'none'}}>v0.2.0</span>
           {showAuthor && (
             <span className="s-author-link" onClick={() => tauriApi.openUrl('https://github.com/zengtai/tinypng-desktop')}>
               <img src={logoSvg} alt="" width="16" height="16" />
